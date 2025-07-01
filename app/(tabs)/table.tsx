@@ -4,11 +4,15 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  TextInput,
+  TouchableOpacity,
+  Alert,
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Table, Calendar, DollarSign, TrendingUp } from 'lucide-react-native';
+import { Table, Calendar, DollarSign, TrendingUp, Save, Plus, TrendingDown } from 'lucide-react-native';
 import AnimatedCard from '@/components/AnimatedCard';
+import GlassCard from '@/components/GlassCard';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -42,6 +46,13 @@ interface YearlyData {
   outperformance: number;
 }
 
+interface PortfolioEntry {
+  id: string;
+  date: string;
+  amount: number;
+  timestamp: number;
+}
+
 export default function TableScreen() {
   const [calculatorState, setCalculatorState] = useState<CalculatorState>({
     startingAmount: 0,
@@ -63,6 +74,9 @@ export default function TableScreen() {
     useInflationAdjustment: false,
   });
   const [yearlyData, setYearlyData] = useState<YearlyData[]>([]);
+  const [portfolioEntries, setPortfolioEntries] = useState<PortfolioEntry[]>([]);
+  const [actualAmount, setActualAmount] = useState('');
+  const [inputError, setInputError] = useState('');
 
   const isMobile = screenWidth < 768;
 
@@ -75,8 +89,27 @@ export default function TableScreen() {
       }
     };
 
+    // Load portfolio entries from localStorage
+    const loadPortfolioEntries = () => {
+      const savedEntries = localStorage.getItem('freedom21_portfolio_entries');
+      if (savedEntries) {
+        setPortfolioEntries(JSON.parse(savedEntries));
+      } else {
+        // Add sample entry to demonstrate functionality
+        const sampleEntry: PortfolioEntry = {
+          id: 'sample-1',
+          date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString(), // 30 days ago
+          amount: 25000,
+          timestamp: Date.now() - 30 * 24 * 60 * 60 * 1000,
+        };
+        setPortfolioEntries([sampleEntry]);
+        localStorage.setItem('freedom21_portfolio_entries', JSON.stringify([sampleEntry]));
+      }
+    };
+
     // Load initial state
     loadCalculatorState();
+    loadPortfolioEntries();
 
     // Listen for storage changes (when calculator state updates)
     const handleStorageChange = (e: StorageEvent) => {
@@ -239,6 +272,56 @@ export default function TableScreen() {
     setYearlyData(data);
   };
 
+  const validateInput = (value: string): boolean => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue) || numValue <= 0) {
+      setInputError('Please enter a valid amount');
+      return false;
+    }
+    setInputError('');
+    return true;
+  };
+
+  const savePortfolioEntry = () => {
+    if (!validateInput(actualAmount)) {
+      return;
+    }
+
+    const newEntry: PortfolioEntry = {
+      id: Date.now().toString(),
+      date: new Date().toLocaleDateString(),
+      amount: parseFloat(actualAmount),
+      timestamp: Date.now(),
+    };
+
+    const updatedEntries = [...portfolioEntries, newEntry].sort((a, b) => b.timestamp - a.timestamp);
+    setPortfolioEntries(updatedEntries);
+    localStorage.setItem('freedom21_portfolio_entries', JSON.stringify(updatedEntries));
+    setActualAmount('');
+    
+    Alert.alert('Success', 'Portfolio amount saved successfully!');
+  };
+
+  const getCurrentTargetValue = (): number => {
+    const currentYear = new Date().getFullYear();
+    const startYear = currentYear - Math.floor((Date.now() - (portfolioEntries[0]?.timestamp || Date.now())) / (365.25 * 24 * 60 * 60 * 1000));
+    const yearsElapsed = currentYear - startYear;
+    
+    if (yearsElapsed <= 0) return calculatorState.startingAmount;
+    
+    const result = calculateYearByYearProgression(
+      calculatorState.startingAmount,
+      calculatorState.monthlyAmount,
+      calculatorState.customCAGR,
+      yearsElapsed,
+      calculatorState.pauseAfterYears,
+      calculatorState.boostAfterYears,
+      calculatorState.boostAmount
+    );
+    
+    return result.value;
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -387,6 +470,78 @@ export default function TableScreen() {
     </View>
   );
 
+  // Portfolio Tracking Table Components
+  const PortfolioTrackingHeader = () => (
+    <View style={styles.portfolioTableHeader}>
+      <Text style={[styles.portfolioHeaderCell, styles.dateColumn]}>Date</Text>
+      <Text style={[styles.portfolioHeaderCell, styles.amountColumn]}>Portfolio Amount</Text>
+      <Text style={[styles.portfolioHeaderCell, styles.varianceColumn]}>Variance</Text>
+    </View>
+  );
+
+  const PortfolioTrackingRow = ({ entry, index }: { entry: PortfolioEntry; index: number }) => {
+    const targetValue = getCurrentTargetValue();
+    const variance = entry.amount - targetValue;
+    const variancePercentage = targetValue > 0 ? (variance / targetValue) * 100 : 0;
+    
+    return (
+      <View style={[styles.portfolioTableRow, index % 2 === 0 && styles.portfolioTableRowEven]}>
+        <Text style={[styles.portfolioCell, styles.dateColumn, styles.dateText]}>{entry.date}</Text>
+        <Text style={[styles.portfolioCell, styles.amountColumn, styles.amountText]}>
+          {formatCurrency(entry.amount)}
+        </Text>
+        <View style={[styles.portfolioCell, styles.varianceColumn, styles.varianceContainer]}>
+          {variance >= 0 ? (
+            <TrendingUp size={16} color="#00D4AA" />
+          ) : (
+            <TrendingDown size={16} color="#EF4444" />
+          )}
+          <Text style={[
+            styles.varianceText,
+            { color: variance >= 0 ? '#00D4AA' : '#EF4444' }
+          ]}>
+            {variance >= 0 ? '+' : ''}{formatCurrency(variance)}
+          </Text>
+          <Text style={[
+            styles.variancePercentage,
+            { color: variance >= 0 ? '#00D4AA' : '#EF4444' }
+          ]}>
+            ({variancePercentage >= 0 ? '+' : ''}{variancePercentage.toFixed(1)}%)
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  // Mobile Portfolio Card
+  const MobilePortfolioCard = ({ entry, index }: { entry: PortfolioEntry; index: number }) => {
+    const targetValue = getCurrentTargetValue();
+    const variance = entry.amount - targetValue;
+    const variancePercentage = targetValue > 0 ? (variance / targetValue) * 100 : 0;
+    
+    return (
+      <View style={[styles.mobilePortfolioCard, index % 2 === 0 && styles.mobilePortfolioCardEven]}>
+        <View style={styles.mobilePortfolioHeader}>
+          <Text style={styles.mobilePortfolioDate}>{entry.date}</Text>
+          <Text style={styles.mobilePortfolioAmount}>{formatCurrency(entry.amount)}</Text>
+        </View>
+        <View style={styles.mobilePortfolioVariance}>
+          {variance >= 0 ? (
+            <TrendingUp size={16} color="#00D4AA" />
+          ) : (
+            <TrendingDown size={16} color="#EF4444" />
+          )}
+          <Text style={[
+            styles.mobileVarianceText,
+            { color: variance >= 0 ? '#00D4AA' : '#EF4444' }
+          ]}>
+            {variance >= 0 ? '+' : ''}{formatCurrency(variance)} ({variancePercentage >= 0 ? '+' : ''}{variancePercentage.toFixed(1)}%)
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -415,6 +570,74 @@ export default function TableScreen() {
               <Text style={styles.methodNote}>
                 📊 Benchmark uses same strategy with {calculatorState.btcHurdleRate}% CAGR
               </Text>
+            </View>
+          </AnimatedCard>
+
+          {/* Portfolio Tracking Section */}
+          <AnimatedCard delay={50}>
+            <View style={styles.portfolioTrackingContainer}>
+              <Text style={styles.portfolioTrackingTitle}>📊 Portfolio Tracking</Text>
+              <Text style={styles.portfolioTrackingDescription}>
+                Track your actual portfolio value over time and see how you're performing against your target projections
+              </Text>
+              
+              {/* Input Section */}
+              <View style={styles.inputSection}>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Actual Portfolio Amount</Text>
+                  <View style={styles.inputRow}>
+                    <TextInput
+                      style={[styles.portfolioInput, inputError ? styles.portfolioInputError : null]}
+                      value={actualAmount}
+                      onChangeText={(text) => {
+                        setActualAmount(text);
+                        if (inputError) setInputError('');
+                      }}
+                      placeholder="Enter current portfolio value"
+                      placeholderTextColor="#64748B"
+                      keyboardType="numeric"
+                    />
+                    <TouchableOpacity
+                      style={styles.saveButton}
+                      onPress={savePortfolioEntry}
+                      activeOpacity={0.8}
+                    >
+                      <LinearGradient
+                        colors={['#00D4AA', '#00A887']}
+                        style={styles.saveButtonGradient}
+                      >
+                        <Plus size={20} color="#FFFFFF" />
+                        <Text style={styles.saveButtonText}>Save</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                  {inputError ? (
+                    <Text style={styles.errorText}>{inputError}</Text>
+                  ) : null}
+                </View>
+              </View>
+
+              {/* Portfolio Tracking Table */}
+              <View style={styles.portfolioTableContainer}>
+                {isMobile ? (
+                  // Mobile Card View
+                  <View style={styles.mobilePortfolioContainer}>
+                    {portfolioEntries.map((entry, index) => (
+                      <MobilePortfolioCard key={entry.id} entry={entry} index={index} />
+                    ))}
+                  </View>
+                ) : (
+                  // Desktop Table View
+                  <View style={styles.portfolioTableScrollView}>
+                    <View style={styles.portfolioTable}>
+                      <PortfolioTrackingHeader />
+                      {portfolioEntries.map((entry, index) => (
+                        <PortfolioTrackingRow key={entry.id} entry={entry} index={index} />
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
             </View>
           </AnimatedCard>
 
@@ -503,6 +726,13 @@ export default function TableScreen() {
                   • <Text style={styles.boldText}>Invested</Text>: Total money you've put in{calculatorState.startingAmount > 0 ? ' (including starting amount)' : ''}{'\n'}
                   • <Text style={styles.boldText}>Portfolio Value</Text>: What your investment is worth (includes growth){'\n'}
                   • <Text style={styles.boldText}>Final Year Portfolio</Text>: {formatCurrency(yearlyData[yearlyData.length - 1]?.assetValue || 0)} ✨
+                </Text>
+              </View>
+
+              <View style={styles.phaseCard}>
+                <Text style={styles.phaseTitle}>📊 Portfolio Tracking Benefits</Text>
+                <Text style={styles.phaseText}>
+                  Track your actual portfolio value to see if you're ahead or behind your target projections. The variance column shows how much you're outperforming or underperforming your calculated strategy.
                 </Text>
               </View>
 
@@ -655,6 +885,213 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     fontWeight: 'bold',
   },
+
+  // Portfolio Tracking Styles
+  portfolioTrackingContainer: {
+    marginBottom: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  portfolioTrackingTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  portfolioTrackingDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  inputSection: {
+    marginBottom: 24,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  portfolioInput: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    minHeight: 52,
+  },
+  portfolioInputError: {
+    borderColor: '#EF4444',
+    borderWidth: 2,
+  },
+  saveButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    minHeight: 52,
+  },
+  saveButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 8,
+    minHeight: 52,
+  },
+  saveButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  errorText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#EF4444',
+    marginTop: 8,
+  },
+
+  // Portfolio Table Styles
+  portfolioTableContainer: {
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  portfolioTableScrollView: {
+    width: '100%',
+  },
+  portfolioTable: {
+    width: '100%',
+  },
+  portfolioTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+  },
+  portfolioHeaderCell: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  portfolioTableRow: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+  },
+  portfolioTableRowEven: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  portfolioCell: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#E2E8F0',
+    textAlign: 'center',
+  },
+  dateColumn: {
+    flex: 1,
+    minWidth: 100,
+  },
+  amountColumn: {
+    flex: 1.5,
+    minWidth: 120,
+  },
+  varianceColumn: {
+    flex: 2,
+    minWidth: 160,
+  },
+  dateText: {
+    fontFamily: 'Inter-SemiBold',
+    color: '#94A3B8',
+  },
+  amountText: {
+    fontFamily: 'Inter-Bold',
+    color: '#00D4AA',
+    fontSize: 15,
+  },
+  varianceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  varianceText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+  },
+  variancePercentage: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+  },
+
+  // Mobile Portfolio Card Styles
+  mobilePortfolioContainer: {
+    gap: 12,
+  },
+  mobilePortfolioCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  mobilePortfolioCardEven: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  mobilePortfolioHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  mobilePortfolioDate: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#94A3B8',
+  },
+  mobilePortfolioAmount: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#00D4AA',
+  },
+  mobilePortfolioVariance: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  mobileVarianceText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    textAlign: 'center',
+  },
+
   summaryContainer: {
     flexDirection: 'row',
     gap: 12,
