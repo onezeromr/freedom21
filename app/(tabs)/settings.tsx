@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Settings, Heart, Star, Share2, Info, User, LogOut, LogIn, UserPlus, Cloud } from 'lucide-react-native';
+import { Settings, Heart, Share2, Info, User, LogOut, LogIn, UserPlus, Cloud } from 'lucide-react-native';
 import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 import AuthModal from '@/components/AuthModal';
@@ -225,25 +225,26 @@ export default function SettingsScreen() {
             </GlassCard>
           </AnimatedCard>
 
-          {/* Support & Feedback */}
+          {/* Share App - Made more prominent */}
           <AnimatedCard delay={300}>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Support & Feedback</Text>
               <View style={styles.settingsGroup}>
-                <SettingItem
-                  icon={<Star size={24} color="#F59E0B" />}
-                  title="Rate Freedom21"
-                  subtitle="Help us improve with your feedback"
-                  onPress={() => alert('Thank you for your interest! Rating feature coming soon.')}
-                  color="#F59E0B"
-                />
-
-                <SettingItem
-                  icon={<Share2 size={24} color="#00D4AA" />}
-                  title="Share App"
-                  subtitle="Tell your friends about Freedom21"
+                <TouchableOpacity
+                  style={styles.shareAppButton}
                   onPress={handleShare}
-                />
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={['#00D4AA', '#00A887']}
+                    style={styles.shareAppGradient}
+                  >
+                    <Share2 size={24} color="#FFFFFF" />
+                    <View style={styles.shareAppContent}>
+                      <Text style={styles.shareAppTitle}>Share Freedom21</Text>
+                      <Text style={styles.shareAppSubtitle}>Tell your friends about this wealth calculator</Text>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
               </View>
             </View>
           </AnimatedCard>
@@ -263,7 +264,7 @@ export default function SettingsScreen() {
                 <SettingItem
                   icon={<Heart size={24} color="#EF4444" />}
                   title="Made For My Children"
-                  subtitle="Built for the investing community"
+                  subtitle="Built for the Bitcoin community"
                   color="#EF4444"
                   showChevron={false}
                 />
@@ -516,6 +517,33 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#94A3B8',
     lineHeight: 22,
+  },
+  shareAppButton: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  shareAppGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 24,
+    gap: 16,
+  },
+  shareAppContent: {
+    flex: 1,
+  },
+  shareAppTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  shareAppSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+    opacity: 0.9,
   },
   cloudFeaturesCard: {
     paddingVertical: 20,

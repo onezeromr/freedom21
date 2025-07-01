@@ -52,8 +52,6 @@ const ASSET_OPTIONS = [
   { name: 'BTC', fullName: 'Bitcoin', defaultCAGR: 30, color: '#F7931A' },
   { name: 'SPX', fullName: 'S&P 500', defaultCAGR: 10, color: '#1E40AF' },
   { name: 'QQQ', fullName: 'Nasdaq 100', defaultCAGR: 12, color: '#059669' },
-  { name: 'NVDA', fullName: 'NVIDIA', defaultCAGR: 25, color: '#76B900' },
-  { name: 'TSLA', fullName: 'Tesla', defaultCAGR: 20, color: '#E31E24' },
   { name: 'MSTR', fullName: 'MicroStrategy', defaultCAGR: 35, color: '#FF6B35' },
   { name: 'MTPLF', fullName: 'Metaplanet', defaultCAGR: 40, color: '#9333EA' },
   { name: 'Custom', fullName: 'Custom Asset', defaultCAGR: 15, color: '#8B5CF6' },
@@ -438,27 +436,8 @@ export default function CalculatorScreen() {
             </GlassCard>
           </AnimatedCard>
 
-          {/* Time Horizon */}
+          {/* Current Age - Moved above Time Horizon */}
           <AnimatedCard delay={300}>
-            <GlassCard style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Calendar size={20} color="#00D4AA" />
-                <Text style={styles.sectionTitle}>Time Horizon</Text>
-              </View>
-              <ModernSlider
-                value={years}
-                minimumValue={1}
-                maximumValue={50}
-                step={1}
-                onValueChange={setYears}
-                formatValue={(val) => `${val} years`}
-                color="#00D4AA"
-              />
-            </GlassCard>
-          </AnimatedCard>
-
-          {/* Current Age */}
-          <AnimatedCard delay={400}>
             <GlassCard style={styles.section}>
               <View style={styles.sectionHeader}>
                 <User size={20} color="#00D4AA" />
@@ -483,7 +462,26 @@ export default function CalculatorScreen() {
             </GlassCard>
           </AnimatedCard>
 
-          {/* Asset Selection */}
+          {/* Time Horizon - Moved below Current Age */}
+          <AnimatedCard delay={400}>
+            <GlassCard style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Calendar size={20} color="#00D4AA" />
+                <Text style={styles.sectionTitle}>Time Horizon</Text>
+              </View>
+              <ModernSlider
+                value={years}
+                minimumValue={1}
+                maximumValue={50}
+                step={1}
+                onValueChange={setYears}
+                formatValue={(val) => `${val} years`}
+                color="#00D4AA"
+              />
+            </GlassCard>
+          </AnimatedCard>
+
+          {/* Asset Selection - Updated to remove TSLA and NVDA */}
           <AnimatedCard delay={500}>
             <GlassCard style={styles.section}>
               <View style={styles.sectionHeader}>
