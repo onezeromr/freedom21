@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 
@@ -43,6 +43,8 @@ export function usePortfolioSync() {
   const [portfolioEntries, setPortfolioEntries] = useState<PortfolioEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSyncedStateRef = useRef<string>('');
 
   // Load portfolio state from cloud or localStorage
   const loadPortfolioState = useCallback(async () => {
@@ -93,6 +95,9 @@ export function usePortfolioSync() {
           
           // Also save to localStorage for offline access
           localStorage.setItem('freedom21_calculator_state', JSON.stringify(cloudState));
+          
+          // Update last synced state reference
+          lastSyncedStateRef.current = JSON.stringify(cloudState);
           return;
         }
       }
@@ -102,6 +107,7 @@ export function usePortfolioSync() {
       if (savedState) {
         const localState = JSON.parse(savedState);
         setPortfolioState(localState);
+        lastSyncedStateRef.current = savedState;
       }
     } catch (error) {
       console.error('Error loading portfolio state:', error);
@@ -112,44 +118,65 @@ export function usePortfolioSync() {
 
   // Save portfolio state to cloud and localStorage
   const savePortfolioState = useCallback(async (state: Partial<PortfolioState>) => {
-    setSyncing(true);
-    
     try {
       const updatedState = { ...portfolioState, ...state, lastUpdated: new Date().toISOString() };
+      const stateString = JSON.stringify(updatedState);
+      
+      // Check if state actually changed
+      if (stateString === lastSyncedStateRef.current) {
+        return; // No changes, don't sync
+      }
       
       // Save to localStorage immediately
-      localStorage.setItem('freedom21_calculator_state', JSON.stringify(updatedState));
+      localStorage.setItem('freedom21_calculator_state', stateString);
       setPortfolioState(updatedState);
       
       // Dispatch event for cross-tab sync
       window.dispatchEvent(new CustomEvent('calculatorStateUpdate', { detail: updatedState }));
 
-      // Save to cloud if user is authenticated
+      // Only sync to cloud if user is authenticated and state actually changed
       if (user) {
-        const { error } = await supabase
-          .from('user_preferences')
-          .upsert({
-            user_id: user.id,
-            default_starting_amount: updatedState.startingAmount,
-            default_monthly_amount: updatedState.monthlyAmount,
-            default_years: updatedState.years,
-            default_current_age: updatedState.currentAge,
-            default_btc_hurdle_rate: updatedState.btcHurdleRate,
-            default_asset: updatedState.selectedAsset,
-            default_cagr: updatedState.customCAGR,
-            updated_at: new Date().toISOString(),
-          }, {
-            onConflict: 'user_id'
-          });
-
-        if (error) {
-          console.error('Error saving portfolio state to cloud:', error);
+        setSyncing(true);
+        
+        // Clear any existing timeout
+        if (syncTimeoutRef.current) {
+          clearTimeout(syncTimeoutRef.current);
         }
+        
+        // Debounce cloud sync
+        syncTimeoutRef.current = setTimeout(async () => {
+          try {
+            const { error } = await supabase
+              .from('user_preferences')
+              .upsert({
+                user_id: user.id,
+                default_starting_amount: updatedState.startingAmount,
+                default_monthly_amount: updatedState.monthlyAmount,
+                default_years: updatedState.years,
+                default_current_age: updatedState.currentAge,
+                default_btc_hurdle_rate: updatedState.btcHurdleRate,
+                default_asset: updatedState.selectedAsset,
+                default_cagr: updatedState.customCAGR,
+                updated_at: new Date().toISOString(),
+              }, {
+                onConflict: 'user_id'
+              });
+
+            if (error) {
+              console.error('Error saving portfolio state to cloud:', error);
+            } else {
+              // Update last synced state reference only on successful sync
+              lastSyncedStateRef.current = stateString;
+            }
+          } catch (error) {
+            console.error('Error saving portfolio state to cloud:', error);
+          } finally {
+            setSyncing(false);
+          }
+        }, 1000); // 1 second debounce
       }
     } catch (error) {
       console.error('Error saving portfolio state:', error);
-    } finally {
-      setSyncing(false);
     }
   }, [user, portfolioState]);
 
@@ -360,11 +387,13 @@ export function usePortfolioSync() {
       if (e.key === 'freedom21_calculator_state' && e.newValue) {
         const newState = JSON.parse(e.newValue);
         setPortfolioState(newState);
+        lastSyncedStateRef.current = e.newValue;
       }
     };
 
     const handleCalculatorUpdate = (event: CustomEvent) => {
       setPortfolioState(event.detail);
+      lastSyncedStateRef.current = JSON.stringify(event.detail);
     };
 
     window.addEventListener('storage', handleStorageChange);
@@ -400,6 +429,15 @@ export function usePortfolioSync() {
       supabase.removeChannel(channel);
     };
   }, [user, loadPortfolioEntries]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return {
     portfolioState,
