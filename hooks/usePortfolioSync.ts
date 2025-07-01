@@ -138,6 +138,8 @@ export function usePortfolioSync() {
             default_asset: updatedState.selectedAsset,
             default_cagr: updatedState.customCAGR,
             updated_at: new Date().toISOString(),
+          }, {
+            onConflict: 'user_id'
           });
 
         if (error) {
