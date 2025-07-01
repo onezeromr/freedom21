@@ -4,15 +4,17 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
+  TextInput,
   Alert,
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Table, Calendar, DollarSign, TrendingUp, Save, Plus, TrendingDown, Target, Trash2 } from 'lucide-react-native';
+import { Table, Calendar, DollarSign, TrendingUp, Plus, Trash2, User, BarChart3 } from 'lucide-react-native';
 import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -50,10 +52,15 @@ interface PortfolioEntry {
   id: string;
   date: string;
   amount: number;
-  timestamp: number;
+  variance: number;
+  variancePercentage: number;
+  target: number;
+  user_id?: string;
+  created_at?: string;
 }
 
 export default function TableScreen() {
+  const { user } = useAuth();
   const [calculatorState, setCalculatorState] = useState<CalculatorState>({
     startingAmount: 0,
     monthlyAmount: 500,
@@ -75,8 +82,9 @@ export default function TableScreen() {
   });
   const [yearlyData, setYearlyData] = useState<YearlyData[]>([]);
   const [portfolioEntries, setPortfolioEntries] = useState<PortfolioEntry[]>([]);
-  const [actualAmount, setActualAmount] = useState('');
-  const [inputError, setInputError] = useState('');
+  const [currentAmount, setCurrentAmount] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const isMobile = screenWidth < 768;
 
@@ -89,41 +97,8 @@ export default function TableScreen() {
       }
     };
 
-    // Load portfolio entries from localStorage
-    const loadPortfolioEntries = () => {
-      const savedEntries = localStorage.getItem('freedom21_portfolio_entries');
-      if (savedEntries) {
-        setPortfolioEntries(JSON.parse(savedEntries));
-      } else {
-        // Add sample entries to demonstrate functionality
-        const sampleEntries: PortfolioEntry[] = [
-          {
-            id: 'sample-1',
-            date: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toLocaleDateString(),
-            amount: 22000,
-            timestamp: Date.now() - 60 * 24 * 60 * 60 * 1000,
-          },
-          {
-            id: 'sample-2',
-            date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
-            amount: 25500,
-            timestamp: Date.now() - 30 * 24 * 60 * 60 * 1000,
-          },
-          {
-            id: 'sample-3',
-            date: new Date().toLocaleDateString(),
-            amount: 26000,
-            timestamp: Date.now(),
-          },
-        ];
-        setPortfolioEntries(sampleEntries);
-        localStorage.setItem('freedom21_portfolio_entries', JSON.stringify(sampleEntries));
-      }
-    };
-
     // Load initial state
     loadCalculatorState();
-    loadPortfolioEntries();
 
     // Listen for storage changes (when calculator state updates)
     const handleStorageChange = (e: StorageEvent) => {
@@ -153,6 +128,166 @@ export default function TableScreen() {
   useEffect(() => {
     generateYearlyData();
   }, [calculatorState]);
+
+  useEffect(() => {
+    loadPortfolioEntries();
+  }, [user]);
+
+  // Load portfolio entries from Supabase or localStorage
+  const loadPortfolioEntries = async () => {
+    if (user) {
+      // Load from Supabase for authenticated users
+      try {
+        const { data, error } = await supabase
+          .from('portfolio_entries')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const entries = data?.map(entry => ({
+          id: entry.id,
+          date: new Date(entry.created_at).toLocaleDateString(),
+          amount: entry.amount,
+          variance: entry.variance,
+          variancePercentage: entry.variance_percentage,
+          target: entry.target,
+          user_id: entry.user_id,
+          created_at: entry.created_at,
+        })) || [];
+
+        setPortfolioEntries(entries);
+      } catch (error) {
+        console.error('Error loading portfolio entries:', error);
+        // Fallback to localStorage
+        loadFromLocalStorage();
+      }
+    } else {
+      // Load from localStorage for non-authenticated users
+      loadFromLocalStorage();
+    }
+  };
+
+  const loadFromLocalStorage = () => {
+    const saved = localStorage.getItem('portfolio_entries');
+    if (saved) {
+      try {
+        const entries = JSON.parse(saved);
+        setPortfolioEntries(entries);
+      } catch (error) {
+        console.error('Error parsing portfolio entries:', error);
+        setPortfolioEntries([]);
+      }
+    } else {
+      // Add sample entries for demonstration
+      const sampleEntries = [
+        {
+          id: 'sample-1',
+          date: '7/1/2025',
+          amount: 26000,
+          variance: 19400,
+          variancePercentage: 294.0,
+          target: 6600,
+        },
+        {
+          id: 'sample-2',
+          date: '6/1/2025',
+          amount: 25500,
+          variance: 18900,
+          variancePercentage: 286.4,
+          target: 6600,
+        },
+        {
+          id: 'sample-3',
+          date: '5/2/2025',
+          amount: 22000,
+          variance: 15400,
+          variancePercentage: 233.3,
+          target: 6600,
+        },
+      ];
+      setPortfolioEntries(sampleEntries);
+    }
+  };
+
+  // Save portfolio entry to Supabase or localStorage
+  const savePortfolioEntry = async (entry: Omit<PortfolioEntry, 'id'>) => {
+    if (user) {
+      // Save to Supabase for authenticated users
+      try {
+        const { data, error } = await supabase
+          .from('portfolio_entries')
+          .insert({
+            user_id: user.id,
+            amount: entry.amount,
+            variance: entry.variance,
+            variance_percentage: entry.variancePercentage,
+            target: entry.target,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        const newEntry: PortfolioEntry = {
+          id: data.id,
+          date: new Date(data.created_at).toLocaleDateString(),
+          amount: data.amount,
+          variance: data.variance,
+          variancePercentage: data.variance_percentage,
+          target: data.target,
+          user_id: data.user_id,
+          created_at: data.created_at,
+        };
+
+        setPortfolioEntries(prev => [newEntry, ...prev]);
+        return true;
+      } catch (error) {
+        console.error('Error saving to Supabase:', error);
+        Alert.alert('Error', 'Failed to save portfolio entry. Please try again.');
+        return false;
+      }
+    } else {
+      // Save to localStorage for non-authenticated users
+      const newEntry: PortfolioEntry = {
+        ...entry,
+        id: Date.now().toString(),
+        date: new Date().toLocaleDateString(),
+      };
+
+      const updatedEntries = [newEntry, ...portfolioEntries];
+      setPortfolioEntries(updatedEntries);
+      localStorage.setItem('portfolio_entries', JSON.stringify(updatedEntries));
+      return true;
+    }
+  };
+
+  // Delete portfolio entry
+  const deletePortfolioEntry = async (id: string) => {
+    if (user && !id.startsWith('sample-')) {
+      // Delete from Supabase for authenticated users
+      try {
+        const { error } = await supabase
+          .from('portfolio_entries')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+
+        setPortfolioEntries(prev => prev.filter(entry => entry.id !== id));
+      } catch (error) {
+        console.error('Error deleting from Supabase:', error);
+        Alert.alert('Error', 'Failed to delete portfolio entry. Please try again.');
+      }
+    } else {
+      // Delete from localStorage
+      const updatedEntries = portfolioEntries.filter(entry => entry.id !== id);
+      setPortfolioEntries(updatedEntries);
+      localStorage.setItem('portfolio_entries', JSON.stringify(updatedEntries));
+    }
+  };
 
   // Get the effective growth rate for a given year
   const getEffectiveGrowthRate = (year: number, baseRate: number): number => {
@@ -286,68 +421,74 @@ export default function TableScreen() {
     setYearlyData(data);
   };
 
-  const validateInput = (value: string): boolean => {
-    const numValue = parseFloat(value);
-    if (isNaN(numValue) || numValue <= 0) {
-      setInputError('Please enter a valid amount');
-      return false;
-    }
-    setInputError('');
-    return true;
+  // Get Year 1 target value
+  const getTargetValue = (): number => {
+    const { startingAmount, monthlyAmount, customCAGR, pauseAfterYears, boostAfterYears, boostAmount } = calculatorState;
+    
+    const result = calculateYearByYearProgression(
+      startingAmount,
+      monthlyAmount,
+      customCAGR,
+      1, // Year 1
+      pauseAfterYears,
+      boostAfterYears,
+      boostAmount
+    );
+    
+    return result.value;
   };
 
-  const savePortfolioEntry = () => {
-    if (!validateInput(actualAmount)) {
+  const handleSaveEntry = async () => {
+    setError('');
+    
+    // Validate input
+    const amount = parseFloat(currentAmount.replace(/[^0-9.-]/g, ''));
+    if (isNaN(amount) || amount <= 0) {
+      setError('Please enter a valid amount');
       return;
     }
 
-    const newEntry: PortfolioEntry = {
-      id: Date.now().toString(),
-      date: new Date().toLocaleDateString(),
-      amount: parseFloat(actualAmount),
-      timestamp: Date.now(),
-    };
+    if (!user) {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to save portfolio entries to the cloud. You can still use the app without signing in, but your data will only be saved locally.',
+        [
+          { text: 'Continue Locally', style: 'cancel' },
+          { text: 'Sign In', onPress: () => {/* Navigate to settings */} }
+        ]
+      );
+    }
 
-    const updatedEntries = [...portfolioEntries, newEntry].sort((a, b) => b.timestamp - a.timestamp);
-    setPortfolioEntries(updatedEntries);
-    localStorage.setItem('freedom21_portfolio_entries', JSON.stringify(updatedEntries));
-    setActualAmount('');
-    
-    Alert.alert('Success', 'Portfolio amount saved successfully!');
+    setLoading(true);
+
+    const target = getTargetValue();
+    const variance = amount - target;
+    const variancePercentage = target > 0 ? (variance / target) * 100 : 0;
+
+    const success = await savePortfolioEntry({
+      date: new Date().toLocaleDateString(),
+      amount,
+      variance,
+      variancePercentage,
+      target,
+    });
+
+    if (success) {
+      setCurrentAmount('');
+    }
+
+    setLoading(false);
   };
 
-  const deletePortfolioEntry = (id: string) => {
+  const handleDeleteEntry = (id: string) => {
     Alert.alert(
       'Delete Entry',
       'Are you sure you want to delete this portfolio entry?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            const updatedEntries = portfolioEntries.filter(entry => entry.id !== id);
-            setPortfolioEntries(updatedEntries);
-            localStorage.setItem('freedom21_portfolio_entries', JSON.stringify(updatedEntries));
-          },
-        },
+        { text: 'Delete', style: 'destructive', onPress: () => deletePortfolioEntry(id) }
       ]
     );
-  };
-
-  // Simple target calculation: Use Year 1 total from calculator
-  const getTargetValue = (): number => {
-    const year1Result = calculateYearByYearProgression(
-      calculatorState.startingAmount,
-      calculatorState.monthlyAmount,
-      calculatorState.customCAGR,
-      1, // Year 1
-      calculatorState.pauseAfterYears,
-      calculatorState.boostAfterYears,
-      calculatorState.boostAmount
-    );
-    
-    return year1Result.value;
   };
 
   const formatCurrency = (amount: number) => {
@@ -415,7 +556,144 @@ export default function TableScreen() {
     </View>
   );
 
-  // Mobile Card View Component
+  // Mobile Card View Component for Portfolio Entries
+  const MobilePortfolioCard = ({ entry, index }: { entry: PortfolioEntry; index: number }) => (
+    <View style={[styles.mobilePortfolioCard, index % 2 === 0 && styles.mobileCardEven]}>
+      <View style={styles.mobilePortfolioHeader}>
+        <View style={styles.mobilePortfolioDate}>
+          <Calendar size={16} color="#00D4AA" />
+          <Text style={styles.mobilePortfolioDateText}>{entry.date}</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.mobileDeleteButton}
+          onPress={() => handleDeleteEntry(entry.id)}
+          activeOpacity={0.7}
+        >
+          <Trash2 size={16} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.mobilePortfolioContent}>
+        <View style={styles.mobilePortfolioAmount}>
+          <Text style={styles.mobilePortfolioLabel}>Portfolio Value</Text>
+          <Text style={styles.mobilePortfolioValue}>{formatCurrency(entry.amount)}</Text>
+        </View>
+
+        <View style={styles.mobilePortfolioVariance}>
+          <Text style={styles.mobilePortfolioLabel}>vs Target</Text>
+          <View style={styles.mobileVarianceContainer}>
+            <TrendingUp 
+              size={14} 
+              color={entry.variance >= 0 ? '#00D4AA' : '#EF4444'} 
+              style={entry.variance < 0 ? { transform: [{ rotate: '180deg' }] } : undefined}
+            />
+            <Text style={[
+              styles.mobileVarianceText,
+              { color: entry.variance >= 0 ? '#00D4AA' : '#EF4444' }
+            ]}>
+              {entry.variance >= 0 ? '+' : ''}{formatCompactCurrency(entry.variance)}
+            </Text>
+          </View>
+          <Text style={styles.mobileVariancePercentage}>
+            ({entry.variance >= 0 ? '+' : ''}{entry.variancePercentage.toFixed(1)}%)
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.mobilePortfolioTarget}>
+        <Text style={styles.mobileTargetLabel}>Target (Year 1): {formatCurrency(entry.target)}</Text>
+      </View>
+    </View>
+  );
+
+  // Desktop Table Components
+  const PortfolioTableHeader = () => (
+    <View style={styles.portfolioTableHeader}>
+      <Text style={[styles.portfolioHeaderCell, styles.dateColumn]}>Date</Text>
+      <Text style={[styles.portfolioHeaderCell, styles.amountColumn]}>Portfolio Amount</Text>
+      <Text style={[styles.portfolioHeaderCell, styles.varianceColumn]}>Variance vs Target</Text>
+      <Text style={[styles.portfolioHeaderCell, styles.actionColumn]}>Action</Text>
+    </View>
+  );
+
+  const PortfolioTableRow = ({ entry, index }: { entry: PortfolioEntry; index: number }) => (
+    <View style={[styles.portfolioTableRow, index % 2 === 0 && styles.portfolioTableRowEven]}>
+      <Text style={[styles.portfolioCell, styles.dateColumn, styles.portfolioDateText]}>{entry.date}</Text>
+      <Text style={[styles.portfolioCell, styles.amountColumn, styles.portfolioAmountText]}>
+        {formatCurrency(entry.amount)}
+      </Text>
+      <View style={[styles.portfolioCell, styles.varianceColumn, styles.portfolioVarianceCell]}>
+        <View style={styles.varianceContainer}>
+          <TrendingUp 
+            size={16} 
+            color={entry.variance >= 0 ? '#00D4AA' : '#EF4444'} 
+            style={entry.variance < 0 ? { transform: [{ rotate: '180deg' }] } : undefined}
+          />
+          <Text style={[
+            styles.varianceText,
+            { color: entry.variance >= 0 ? '#00D4AA' : '#EF4444' }
+          ]}>
+            {entry.variance >= 0 ? '+' : ''}{formatCurrency(entry.variance)}
+          </Text>
+        </View>
+        <Text style={styles.variancePercentage}>
+          ({entry.variance >= 0 ? '+' : ''}{entry.variancePercentage.toFixed(1)}%)
+        </Text>
+      </View>
+      <View style={[styles.portfolioCell, styles.actionColumn]}>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => handleDeleteEntry(entry.id)}
+          activeOpacity={0.7}
+        >
+          <Trash2 size={16} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const YearlyTableHeader = () => (
+    <View style={styles.tableHeader}>
+      <Text style={[styles.headerCell, styles.yearColumn]}>Year</Text>
+      {calculatorState.currentAge && (
+        <Text style={[styles.headerCell, styles.ageColumn]}>Age</Text>
+      )}
+      <Text style={[styles.headerCell, styles.valueColumn]}>💰 Invested</Text>
+      <Text style={[styles.headerCell, styles.valueColumn, styles.portfolioHeader]}>📈 Portfolio Value</Text>
+      <View style={[styles.headerCell, styles.valueColumn, styles.benchmarkHeader]}>
+        <BitcoinIcon size={16} />
+        <Text style={styles.benchmarkHeaderText}>Benchmark</Text>
+      </View>
+      <Text style={[styles.headerCell, styles.valueColumn]}>📊 Difference</Text>
+    </View>
+  );
+
+  const YearlyTableRow = ({ data, index }: { data: YearlyData; index: number }) => (
+    <View style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
+      <Text style={[styles.cell, styles.yearColumn, styles.yearText]}>{data.year}</Text>
+      {calculatorState.currentAge && (
+        <Text style={[styles.cell, styles.ageColumn, styles.ageText]}>{data.age}</Text>
+      )}
+      <Text style={[styles.cell, styles.valueColumn, styles.contributionsText]}>
+        {formatCompactCurrency(data.contributions)}
+      </Text>
+      <Text style={[styles.cell, styles.valueColumn, styles.portfolioValueText]}>
+        {formatCompactCurrency(data.assetValue)}
+      </Text>
+      <Text style={[styles.cell, styles.valueColumn, styles.btcValueText]}>
+        {formatCompactCurrency(data.btcHurdleValue)}
+      </Text>
+      <Text style={[
+        styles.cell, 
+        styles.valueColumn, 
+        data.outperformance >= 0 ? styles.positiveText : styles.negativeText
+      ]}>
+        {data.outperformance >= 0 ? '+' : ''}{formatCompactCurrency(data.outperformance)}
+      </Text>
+    </View>
+  );
+
+  // Mobile Card View Component for Yearly Data
   const MobileYearCard = ({ data, index }: { data: YearlyData; index: number }) => (
     <View style={[styles.mobileCard, index % 2 === 0 && styles.mobileCardEven]}>
       <View style={styles.mobileCardHeader}>
@@ -456,145 +734,6 @@ export default function TableScreen() {
     </View>
   );
 
-  // Desktop Table Components
-  const TableHeader = () => (
-    <View style={styles.tableHeader}>
-      <Text style={[styles.headerCell, styles.yearColumn]}>Year</Text>
-      {calculatorState.currentAge && (
-        <Text style={[styles.headerCell, styles.ageColumn]}>Age</Text>
-      )}
-      <Text style={[styles.headerCell, styles.valueColumn]}>💰 Invested</Text>
-      <Text style={[styles.headerCell, styles.valueColumn, styles.portfolioHeader]}>📈 Portfolio Value</Text>
-      <View style={[styles.headerCell, styles.valueColumn, styles.benchmarkHeader]}>
-        <BitcoinIcon size={16} />
-        <Text style={styles.benchmarkHeaderText}>Benchmark</Text>
-      </View>
-      <Text style={[styles.headerCell, styles.valueColumn]}>📊 Difference</Text>
-    </View>
-  );
-
-  const TableRow = ({ data, index }: { data: YearlyData; index: number }) => (
-    <View style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
-      <Text style={[styles.cell, styles.yearColumn, styles.yearText]}>{data.year}</Text>
-      {calculatorState.currentAge && (
-        <Text style={[styles.cell, styles.ageColumn, styles.ageText]}>{data.age}</Text>
-      )}
-      <Text style={[styles.cell, styles.valueColumn, styles.contributionsText]}>
-        {formatCompactCurrency(data.contributions)}
-      </Text>
-      <Text style={[styles.cell, styles.valueColumn, styles.portfolioValueText]}>
-        {formatCompactCurrency(data.assetValue)}
-      </Text>
-      <Text style={[styles.cell, styles.valueColumn, styles.btcValueText]}>
-        {formatCompactCurrency(data.btcHurdleValue)}
-      </Text>
-      <Text style={[
-        styles.cell, 
-        styles.valueColumn, 
-        data.outperformance >= 0 ? styles.positiveText : styles.negativeText
-      ]}>
-        {data.outperformance >= 0 ? '+' : ''}{formatCompactCurrency(data.outperformance)}
-      </Text>
-    </View>
-  );
-
-  // Portfolio Tracking Table Components
-  const PortfolioTrackingHeader = () => (
-    <View style={styles.portfolioTableHeader}>
-      <Text style={[styles.portfolioHeaderCell, styles.dateColumn]}>Date</Text>
-      <Text style={[styles.portfolioHeaderCell, styles.amountColumn]}>Portfolio Amount</Text>
-      <Text style={[styles.portfolioHeaderCell, styles.varianceColumn]}>Variance vs Target</Text>
-      <Text style={[styles.portfolioHeaderCell, styles.actionColumn]}>Action</Text>
-    </View>
-  );
-
-  const PortfolioTrackingRow = ({ entry, index }: { entry: PortfolioEntry; index: number }) => {
-    const targetValue = getTargetValue();
-    const variance = entry.amount - targetValue;
-    const variancePercentage = targetValue > 0 ? (variance / targetValue) * 100 : 0;
-    
-    return (
-      <View style={[styles.portfolioTableRow, index % 2 === 0 && styles.portfolioTableRowEven]}>
-        <Text style={[styles.portfolioCell, styles.dateColumn, styles.dateText]}>{entry.date}</Text>
-        <Text style={[styles.portfolioCell, styles.amountColumn, styles.amountText]}>
-          {formatCurrency(entry.amount)}
-        </Text>
-        <View style={[styles.portfolioCell, styles.varianceColumn, styles.varianceContainer]}>
-          {variance >= 0 ? (
-            <TrendingUp size={16} color="#00D4AA" />
-          ) : (
-            <TrendingDown size={16} color="#EF4444" />
-          )}
-          <View style={styles.varianceTextContainer}>
-            <Text style={[
-              styles.varianceText,
-              { color: variance >= 0 ? '#00D4AA' : '#EF4444' }
-            ]}>
-              {variance >= 0 ? '+' : ''}{formatCurrency(variance)}
-            </Text>
-            <Text style={[
-              styles.variancePercentage,
-              { color: variance >= 0 ? '#00D4AA' : '#EF4444' }
-            ]}>
-              ({variancePercentage >= 0 ? '+' : ''}{variancePercentage.toFixed(1)}%)
-            </Text>
-          </View>
-        </View>
-        <View style={[styles.portfolioCell, styles.actionColumn]}>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => deletePortfolioEntry(entry.id)}
-            activeOpacity={0.7}
-          >
-            <Trash2 size={16} color="#EF4444" />
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
-
-  // Mobile Portfolio Card
-  const MobilePortfolioCard = ({ entry, index }: { entry: PortfolioEntry; index: number }) => {
-    const targetValue = getTargetValue();
-    const variance = entry.amount - targetValue;
-    const variancePercentage = targetValue > 0 ? (variance / targetValue) * 100 : 0;
-    
-    return (
-      <View style={[styles.mobilePortfolioCard, index % 2 === 0 && styles.mobilePortfolioCardEven]}>
-        <View style={styles.mobilePortfolioHeader}>
-          <Text style={styles.mobilePortfolioDate}>{entry.date}</Text>
-          <View style={styles.mobilePortfolioActions}>
-            <Text style={styles.mobilePortfolioAmount}>{formatCurrency(entry.amount)}</Text>
-            <TouchableOpacity
-              style={styles.mobileDeleteButton}
-              onPress={() => deletePortfolioEntry(entry.id)}
-              activeOpacity={0.7}
-            >
-              <Trash2 size={16} color="#EF4444" />
-            </TouchableOpacity>
-          </View>
-        </View>
-        <View style={styles.mobilePortfolioVariance}>
-          {variance >= 0 ? (
-            <TrendingUp size={16} color="#00D4AA" />
-          ) : (
-            <TrendingDown size={16} color="#EF4444" />
-          )}
-          <Text style={[
-            styles.mobileVarianceText,
-            { color: variance >= 0 ? '#00D4AA' : '#EF4444' }
-          ]}>
-            {variance >= 0 ? '+' : ''}{formatCurrency(variance)} ({variancePercentage >= 0 ? '+' : ''}{variancePercentage.toFixed(1)}%)
-          </Text>
-        </View>
-        <View style={styles.mobileTargetInfo}>
-          <Target size={14} color="#94A3B8" />
-          <Text style={styles.mobileTargetText}>Target (Year 1): {formatCurrency(targetValue)}</Text>
-        </View>
-      </View>
-    );
-  };
-
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -627,32 +766,40 @@ export default function TableScreen() {
           </AnimatedCard>
 
           {/* Portfolio Tracking Section */}
-          <AnimatedCard delay={50}>
-            <View style={styles.portfolioTrackingContainer}>
-              <Text style={styles.portfolioTrackingTitle}>📊 Portfolio Tracking</Text>
-              <Text style={styles.portfolioTrackingDescription}>
-                Track your actual portfolio value over time and see how you're performing against your Year 1 target projection of {formatCurrency(getTargetValue())}
-              </Text>
-              
+          <AnimatedCard delay={100}>
+            <GlassCard style={styles.portfolioTrackingContainer}>
+              <View style={styles.portfolioTrackingHeader}>
+                <View style={styles.portfolioTrackingIcon}>
+                  <BarChart3 size={24} color="#00D4AA" />
+                </View>
+                <View style={styles.portfolioTrackingTitleContainer}>
+                  <Text style={styles.portfolioTrackingTitle}>📊 Portfolio Tracking</Text>
+                  <Text style={styles.portfolioTrackingSubtitle}>
+                    Track your actual portfolio value over time and see how you're performing against your Year 1 target projection of {formatCurrency(getTargetValue())}
+                  </Text>
+                </View>
+              </View>
+
               {/* Input Section */}
               <View style={styles.inputSection}>
                 <View style={styles.inputContainer}>
                   <Text style={styles.inputLabel}>Actual Portfolio Amount</Text>
                   <View style={styles.inputRow}>
                     <TextInput
-                      style={[styles.portfolioInput, inputError ? styles.portfolioInputError : null]}
-                      value={actualAmount}
-                      onChangeText={(text) => {
-                        setActualAmount(text);
-                        if (inputError) setInputError('');
-                      }}
+                      style={[styles.portfolioInput, error ? styles.portfolioInputError : null]}
                       placeholder="Enter current portfolio value"
                       placeholderTextColor="#64748B"
+                      value={currentAmount}
+                      onChangeText={(text) => {
+                        setCurrentAmount(text);
+                        setError('');
+                      }}
                       keyboardType="numeric"
                     />
                     <TouchableOpacity
-                      style={styles.saveButton}
-                      onPress={savePortfolioEntry}
+                      style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+                      onPress={handleSaveEntry}
+                      disabled={loading}
                       activeOpacity={0.8}
                     >
                       <LinearGradient
@@ -664,50 +811,46 @@ export default function TableScreen() {
                       </LinearGradient>
                     </TouchableOpacity>
                   </View>
-                  {inputError ? (
-                    <Text style={styles.errorText}>{inputError}</Text>
-                  ) : null}
+                  {error ? <Text style={styles.errorText}>{error}</Text> : null}
                 </View>
               </View>
 
-              {/* Portfolio Tracking Table */}
-              <View style={styles.portfolioTableContainer}>
-                {portfolioEntries.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <Save size={48} color="#64748B" />
-                    <Text style={styles.emptyStateTitle}>No Portfolio Entries Yet</Text>
-                    <Text style={styles.emptyStateText}>
-                      Start tracking your actual portfolio value to see how you're performing against your Year 1 target of {formatCurrency(getTargetValue())}.
-                    </Text>
-                  </View>
-                ) : (
-                  <>
-                    {isMobile ? (
-                      // Mobile Card View
-                      <View style={styles.mobilePortfolioContainer}>
-                        {portfolioEntries.map((entry, index) => (
-                          <MobilePortfolioCard key={entry.id} entry={entry} index={index} />
-                        ))}
-                      </View>
-                    ) : (
-                      // Desktop Table View
-                      <View style={styles.portfolioTableScrollView}>
-                        <View style={styles.portfolioTable}>
-                          <PortfolioTrackingHeader />
-                          {portfolioEntries.map((entry, index) => (
-                            <PortfolioTrackingRow key={entry.id} entry={entry} index={index} />
-                          ))}
-                        </View>
-                      </View>
-                    )}
-                  </>
-                )}
-              </View>
-            </View>
+              {/* Portfolio Entries Table/Cards */}
+              {portfolioEntries.length > 0 && (
+                <View style={styles.portfolioEntriesContainer}>
+                  {isMobile ? (
+                    // Mobile Card View
+                    <View style={styles.mobilePortfolioContainer}>
+                      {portfolioEntries.map((entry, index) => (
+                        <MobilePortfolioCard key={entry.id} entry={entry} index={index} />
+                      ))}
+                    </View>
+                  ) : (
+                    // Desktop Table View
+                    <View style={styles.portfolioTableContainer}>
+                      <PortfolioTableHeader />
+                      {portfolioEntries.map((entry, index) => (
+                        <PortfolioTableRow key={entry.id} entry={entry} index={index} />
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {/* Auth Status */}
+              {!user && (
+                <View style={styles.authNotice}>
+                  <User size={16} color="#F59E0B" />
+                  <Text style={styles.authNoticeText}>
+                    Sign in to save your portfolio entries to the cloud and sync across devices
+                  </Text>
+                </View>
+              )}
+            </GlassCard>
           </AnimatedCard>
 
           {/* Summary Cards */}
-          <AnimatedCard delay={100}>
+          <AnimatedCard delay={200}>
             <View style={styles.summaryContainer}>
               <View style={styles.summaryCard}>
                 <TrendingUp size={24} color="#00D4AA" style={styles.summaryIcon} />
@@ -741,8 +884,8 @@ export default function TableScreen() {
             </View>
           </AnimatedCard>
 
-          {/* Table/Cards Container */}
-          <AnimatedCard delay={200}>
+          {/* Yearly Table/Cards Container */}
+          <AnimatedCard delay={300}>
             <View style={styles.tableContainer}>
               <Text style={styles.tableTitle}>Year-by-Year Portfolio Growth</Text>
               <Text style={styles.tableDescription}>
@@ -758,12 +901,12 @@ export default function TableScreen() {
                   ))}
                 </View>
               ) : (
-                // Desktop Table View - Full Width Responsive
+                // Desktop Table View
                 <View style={styles.tableScrollView}>
                   <View style={styles.table}>
-                    <TableHeader />
+                    <YearlyTableHeader />
                     {yearlyData.map((data, index) => (
-                      <TableRow key={data.year} data={data} index={index} />
+                      <YearlyTableRow key={data.year} data={data} index={index} />
                     ))}
                   </View>
                 </View>
@@ -771,113 +914,34 @@ export default function TableScreen() {
             </View>
           </AnimatedCard>
 
-          {/* Growth Analysis */}
-          <AnimatedCard delay={300}>
-            <View style={styles.analysisContainer}>
-              <Text style={styles.analysisTitle}>Understanding Your Portfolio Growth</Text>
-              
-              {calculatorState.startingAmount > 0 && (
-                <View style={styles.phaseCard}>
-                  <Text style={styles.phaseTitle}>💰 Starting Amount Advantage</Text>
-                  <Text style={styles.phaseText}>
-                    Your {formatCurrency(calculatorState.startingAmount)} starting amount gets the full {calculatorState.years} years to compound and grow. This head start can make a massive difference in your final wealth!
-                  </Text>
-                </View>
-              )}
-              
-              <View style={styles.phaseCard}>
-                <Text style={styles.phaseTitle}>💰 Invested vs 📈 Portfolio Value</Text>
-                <Text style={styles.phaseText}>
-                  • <Text style={styles.boldText}>Invested</Text>: Total money you've put in{calculatorState.startingAmount > 0 ? ' (including starting amount)' : ''}{'\n'}
-                  • <Text style={styles.boldText}>Portfolio Value</Text>: What your investment is worth (includes growth){'\n'}
-                  • <Text style={styles.boldText}>Final Year Portfolio</Text>: {formatCurrency(yearlyData[yearlyData.length - 1]?.assetValue || 0)} ✨
-                </Text>
-              </View>
-
-              <View style={styles.phaseCard}>
-                <Text style={styles.phaseTitle}>📊 Portfolio Tracking Target Explained</Text>
-                <Text style={styles.phaseText}>
-                  The target value for portfolio tracking is your <Text style={styles.boldText}>Year 1 projected portfolio value: {formatCurrency(getTargetValue())}</Text>. This represents what your portfolio should be worth after one year of following your current investment strategy. Green variance means you're ahead of this target, red means you're behind.
-                </Text>
-              </View>
-
-              <View style={styles.phaseCard}>
-                <Text style={styles.phaseTitle}>📊 How It Grows Each Year</Text>
-                <Text style={styles.phaseText}>
-                  {calculatorState.pauseAfterYears ? 'Your portfolio grows through compound interest even after you stop contributing. Watch how it accelerates!' : calculatorState.boostAfterYears ? 'Your portfolio grows faster after the boost kicks in. Higher contributions = exponential growth!' : 'Each year: Previous portfolio value grows by your CAGR rate, then new contributions are added.'}
-                </Text>
-              </View>
-
-              {calculatorState.useRealisticCAGR && (
-                <View style={styles.phaseCard}>
-                  <Text style={styles.phaseTitle}>🎯 Conservative CAGR Strategy</Text>
-                  <Text style={styles.phaseText}>
-                    Using 60% of optimistic growth rates provides more realistic projections for financial planning. This conservative approach helps avoid over-optimistic expectations.
-                  </Text>
-                </View>
-              )}
-
-              {calculatorState.useDecliningRates && (
-                <View style={styles.phaseCard}>
-                  <Text style={styles.phaseTitle}>📉 Declining Growth Rates</Text>
-                  <Text style={styles.phaseText}>
-                    Phase 1 (Years 1-10): {calculatorState.phase1Rate}% growth - High growth period{'\n'}
-                    Phase 2 (Years 11-20): {calculatorState.phase2Rate}% growth - Maturing asset{'\n'}
-                    Phase 3 (Years 21+): {calculatorState.phase3Rate}% growth - Stable returns{'\n'}
-                    This reflects how high-growth assets typically mature over time.
-                  </Text>
-                </View>
-              )}
-
-              {calculatorState.useInflationAdjustment && (
-                <View style={styles.phaseCard}>
-                  <Text style={styles.phaseTitle}>💸 Inflation Adjustment</Text>
-                  <Text style={styles.phaseText}>
-                    Subtracting {calculatorState.inflationRate}% inflation shows real purchasing power growth, not just nominal returns. This gives you a clearer picture of actual wealth building.
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.phaseCard}>
-                <Text style={styles.phaseTitle}>⚖️ Fair Benchmark Comparison</Text>
-                <Text style={styles.phaseText}>
-                  Benchmark uses your exact same strategy ({getStrategyText()}) {calculatorState.startingAmount > 0 ? `and starting amount (${formatCurrency(calculatorState.startingAmount)}) ` : ''}but with {calculatorState.btcHurdleRate}% growth rate instead of your asset's rate. This ensures a fair comparison!
-                </Text>
-              </View>
-            </View>
-          </AnimatedCard>
-
-          {/* Formula Explanation */}
+          {/* Target Explanation */}
           <AnimatedCard delay={400}>
-            <View style={styles.formulaContainer}>
-              <Text style={styles.formulaTitle}>How We Calculate Portfolio Value</Text>
-              <Text style={styles.formulaText}>
-                Each year's portfolio value is calculated step by step:
-              </Text>
-              <View style={styles.formulaBox}>
-                <Text style={styles.formulaEquation}>
-                  Portfolio Value = (Previous Year × Growth Rate) + New Contributions
+            <View style={styles.targetExplanationContainer}>
+              <Text style={styles.targetExplanationTitle}>🎯 How Your Target is Calculated</Text>
+              <View style={styles.targetExplanationCard}>
+                <Text style={styles.targetExplanationText}>
+                  Your target value of <Text style={styles.targetHighlight}>{formatCurrency(getTargetValue())}</Text> represents what your portfolio should be worth after 1 year of following your current investment strategy:
                 </Text>
-                {calculatorState.startingAmount > 0 && (
-                  <Text style={styles.formulaNote}>
-                    Starting amount gets full growth period advantage
+                <View style={styles.targetBreakdown}>
+                  <Text style={styles.targetBreakdownItem}>
+                    • Monthly Investment: {formatCurrency(calculatorState.monthlyAmount)}
                   </Text>
-                )}
-                {(calculatorState.useRealisticCAGR || calculatorState.useDecliningRates || calculatorState.useInflationAdjustment) && (
-                  <Text style={styles.formulaNote}>
-                    Growth rate adjusted for: {getStrategyText()}
+                  <Text style={styles.targetBreakdownItem}>
+                    • Expected Growth Rate: {getEffectiveCAGR()}
                   </Text>
-                )}
+                  <Text style={styles.targetBreakdownItem}>
+                    • Strategy: {getStrategyText()}
+                  </Text>
+                  {calculatorState.startingAmount > 0 && (
+                    <Text style={styles.targetBreakdownItem}>
+                      • Starting Amount: {formatCurrency(calculatorState.startingAmount)}
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.targetNote}>
+                  💡 This target updates automatically when you change your calculator settings, giving you a realistic 1-year milestone to track against.
+                </Text>
               </View>
-              <Text style={styles.formulaDescription}>
-                This gives you the exact portfolio value progression year by year, showing how compound growth accelerates over time.
-              </Text>
-              <Text style={styles.benchmarkExplanation}>
-                🎯 Final Portfolio Value: {formatCurrency(yearlyData[yearlyData.length - 1]?.assetValue || 0)} (matches Calculator tab!)
-              </Text>
-              <Text style={styles.targetExplanation}>
-                📊 Portfolio Tracking Target: {formatCurrency(getTargetValue())} (Year 1 projection from your current calculator settings)
-              </Text>
             </View>
           </AnimatedCard>
         </ScrollView>
@@ -957,32 +1021,44 @@ const styles = StyleSheet.create({
   // Portfolio Tracking Styles
   portfolioTrackingContainer: {
     marginBottom: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 24,
+  },
+  portfolioTrackingHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 24,
+  },
+  portfolioTrackingIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 212, 170, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  portfolioTrackingTitleContainer: {
+    flex: 1,
   },
   portfolioTrackingTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Bold',
     color: '#FFFFFF',
     marginBottom: 8,
-    textAlign: 'center',
   },
-  portfolioTrackingDescription: {
+  portfolioTrackingSubtitle: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#94A3B8',
-    textAlign: 'center',
-    marginBottom: 20,
     lineHeight: 20,
   },
+
+  // Input Section Styles
   inputSection: {
     marginBottom: 24,
   },
   inputContainer: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   inputLabel: {
     fontSize: 16,
@@ -1014,14 +1090,17 @@ const styles = StyleSheet.create({
   saveButton: {
     borderRadius: 12,
     overflow: 'hidden',
-    minHeight: 52,
+    minWidth: 100,
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
   saveButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
     paddingVertical: 16,
+    paddingHorizontal: 20,
     gap: 8,
     minHeight: 52,
   },
@@ -1037,30 +1116,106 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  // Portfolio Table Styles
+  // Portfolio Entries Styles
+  portfolioEntriesContainer: {
+    marginBottom: 16,
+  },
+
+  // Mobile Portfolio Cards
+  mobilePortfolioContainer: {
+    gap: 12,
+  },
+  mobilePortfolioCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  mobilePortfolioHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  mobilePortfolioDate: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mobilePortfolioDateText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#00D4AA',
+  },
+  mobileDeleteButton: {
+    padding: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  mobilePortfolioContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  mobilePortfolioAmount: {
+    flex: 1,
+  },
+  mobilePortfolioLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
+    marginBottom: 4,
+  },
+  mobilePortfolioValue: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  mobilePortfolioVariance: {
+    alignItems: 'flex-end',
+  },
+  mobileVarianceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
+  },
+  mobileVarianceText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+  },
+  mobileVariancePercentage: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
+  },
+  mobilePortfolioTarget: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  mobileTargetLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#64748B',
+    textAlign: 'center',
+  },
+
+  // Desktop Portfolio Table
   portfolioTableContainer: {
     backgroundColor: 'rgba(15, 23, 42, 0.6)',
     borderRadius: 12,
     overflow: 'hidden',
-    minHeight: 200,
-  },
-  portfolioTableScrollView: {
-    width: '100%',
-  },
-  portfolioTable: {
-    width: '100%',
   },
   portfolioTableHeader: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     paddingVertical: 16,
     paddingHorizontal: 12,
-  },
-  portfolioHeaderCell: {
-    fontSize: 14,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-    textAlign: 'center',
   },
   portfolioTableRow: {
     flexDirection: 'row',
@@ -1072,6 +1227,12 @@ const styles = StyleSheet.create({
   },
   portfolioTableRowEven: {
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  portfolioHeaderCell: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   portfolioCell: {
     fontSize: 14,
@@ -1085,142 +1246,71 @@ const styles = StyleSheet.create({
   },
   amountColumn: {
     flex: 1.5,
-    minWidth: 120,
+    minWidth: 140,
   },
   varianceColumn: {
     flex: 2,
-    minWidth: 160,
+    minWidth: 180,
   },
   actionColumn: {
-    flex: 0.5,
-    minWidth: 60,
+    flex: 0.8,
+    minWidth: 80,
   },
-  dateText: {
+  portfolioDateText: {
     fontFamily: 'Inter-SemiBold',
-    color: '#94A3B8',
-  },
-  amountText: {
-    fontFamily: 'Inter-Bold',
     color: '#00D4AA',
+  },
+  portfolioAmountText: {
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
     fontSize: 15,
+  },
+  portfolioVarianceCell: {
+    alignItems: 'center',
   },
   varianceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  varianceTextContainer: {
-    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
   },
   varianceText: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    fontSize: 15,
   },
   variancePercentage: {
-    fontFamily: 'Inter-Medium',
     fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
   },
   deleteButton: {
     padding: 8,
-    borderRadius: 8,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.2)',
   },
 
-  // Mobile Portfolio Card Styles
-  mobilePortfolioContainer: {
-    gap: 12,
-    padding: 16,
-  },
-  mobilePortfolioCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  mobilePortfolioCardEven: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  mobilePortfolioHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  mobilePortfolioDate: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#94A3B8',
-  },
-  mobilePortfolioActions: {
+  // Auth Notice
+  authNotice: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
-  mobilePortfolioAmount: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#00D4AA',
-  },
-  mobileDeleteButton: {
-    padding: 8,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    padding: 12,
     borderRadius: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.2)',
-  },
-  mobilePortfolioVariance: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: 'rgba(245, 158, 11, 0.2)',
     gap: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 8,
   },
-  mobileVarianceText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    textAlign: 'center',
-  },
-  mobileTargetInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  mobileTargetText: {
-    fontSize: 12,
+  authNoticeText: {
+    fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#94A3B8',
+    color: '#F59E0B',
+    flex: 1,
+    lineHeight: 18,
   },
 
-  // Empty State
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 20,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#94A3B8',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-
+  // Summary Cards
   summaryContainer: {
     flexDirection: 'row',
     gap: 12,
@@ -1261,6 +1351,8 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
   },
+
+  // Yearly Table Styles
   tableContainer: {
     marginBottom: 24,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -1289,7 +1381,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 212, 170, 0.2)',
   },
 
-  // Mobile Card Styles - Improved width and alignment
+  // Mobile Card Styles for Yearly Data
   mobileContainer: {
     gap: 12,
   },
@@ -1323,14 +1415,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#94A3B8',
   },
-  mobilePortfolioValue: {
-    alignItems: 'flex-end',
-  },
-  mobilePortfolioLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+  mobilePortfolioAmount: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
     color: '#00D4AA',
-    marginBottom: 4,
   },
   mobileMetrics: {
     flexDirection: 'row',
@@ -1377,7 +1465,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Desktop Table Styles - Full Width Responsive with Clean Background
+  // Desktop Table Styles for Yearly Data
   tableScrollView: {
     backgroundColor: 'rgba(15, 23, 42, 0.6)',
     borderRadius: 12,
@@ -1478,7 +1566,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#EF4444',
   },
-  analysisContainer: {
+
+  // Target Explanation Styles
+  targetExplanationContainer: {
     paddingVertical: 24,
     marginBottom: 24,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -1487,111 +1577,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  analysisTitle: {
+  targetExplanationTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: 'center',
   },
-  phaseCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  targetExplanationCard: {
+    backgroundColor: 'rgba(0, 212, 170, 0.1)',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#00D4AA',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 170, 0.2)',
   },
-  phaseTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#00D4AA',
-    marginBottom: 8,
-  },
-  phaseText: {
+  targetExplanationText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#94A3B8',
     lineHeight: 20,
-  },
-  boldText: {
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-  },
-  formulaContainer: {
-    paddingVertical: 24,
-    borderLeftWidth: 4,
-    borderLeftColor: '#F59E0B',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 20,
-    paddingHorizontal: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  formulaTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#F59E0B',
     marginBottom: 12,
-    textAlign: 'center',
   },
-  formulaText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#94A3B8',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  formulaBox: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  formulaEquation: {
-    fontSize: 16,
+  targetHighlight: {
     fontFamily: 'Inter-Bold',
-    color: '#F59E0B',
-    textAlign: 'center',
-  },
-  formulaNote: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#F59E0B',
-    textAlign: 'center',
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
-  formulaDescription: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#94A3B8',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    marginBottom: 16,
-  },
-  benchmarkExplanation: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
     color: '#00D4AA',
-    textAlign: 'center',
-    backgroundColor: 'rgba(0, 212, 170, 0.1)',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 212, 170, 0.2)',
-    marginBottom: 8,
   },
-  targetExplanation: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#8B5CF6',
-    textAlign: 'center',
-    backgroundColor: 'rgba(139, 92, 246, 0.1)',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(139, 92, 246, 0.2)',
+  targetBreakdown: {
+    marginBottom: 12,
+  },
+  targetBreakdownItem: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#E2E8F0',
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  targetNote: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#00D4AA',
+    fontStyle: 'italic',
+    lineHeight: 16,
   },
 });
