@@ -10,7 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Table, Calendar, DollarSign, TrendingUp, Save, Plus, TrendingDown } from 'lucide-react-native';
+import { Table, Calendar, DollarSign, TrendingUp, Save, Plus, TrendingDown, Target } from 'lucide-react-native';
 import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 
@@ -95,15 +95,23 @@ export default function TableScreen() {
       if (savedEntries) {
         setPortfolioEntries(JSON.parse(savedEntries));
       } else {
-        // Add sample entry to demonstrate functionality
-        const sampleEntry: PortfolioEntry = {
-          id: 'sample-1',
-          date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString(), // 30 days ago
-          amount: 25000,
-          timestamp: Date.now() - 30 * 24 * 60 * 60 * 1000,
-        };
-        setPortfolioEntries([sampleEntry]);
-        localStorage.setItem('freedom21_portfolio_entries', JSON.stringify([sampleEntry]));
+        // Add sample entries to demonstrate functionality
+        const sampleEntries: PortfolioEntry[] = [
+          {
+            id: 'sample-1',
+            date: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toLocaleDateString(),
+            amount: 22000,
+            timestamp: Date.now() - 60 * 24 * 60 * 60 * 1000,
+          },
+          {
+            id: 'sample-2',
+            date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
+            amount: 25500,
+            timestamp: Date.now() - 30 * 24 * 60 * 60 * 1000,
+          },
+        ];
+        setPortfolioEntries(sampleEntries);
+        localStorage.setItem('freedom21_portfolio_entries', JSON.stringify(sampleEntries));
       }
     };
 
@@ -302,10 +310,12 @@ export default function TableScreen() {
     Alert.alert('Success', 'Portfolio amount saved successfully!');
   };
 
-  const getCurrentTargetValue = (): number => {
-    const currentYear = new Date().getFullYear();
-    const startYear = currentYear - Math.floor((Date.now() - (portfolioEntries[0]?.timestamp || Date.now())) / (365.25 * 24 * 60 * 60 * 1000));
-    const yearsElapsed = currentYear - startYear;
+  const getCurrentTargetValue = (entryTimestamp: number): number => {
+    // Calculate how many months have passed since the calculator's start date
+    const startDate = new Date(2024, 0, 1); // Assume start of 2024 as baseline
+    const entryDate = new Date(entryTimestamp);
+    const monthsElapsed = Math.max(0, Math.floor((entryDate.getTime() - startDate.getTime()) / (30.44 * 24 * 60 * 60 * 1000)));
+    const yearsElapsed = monthsElapsed / 12;
     
     if (yearsElapsed <= 0) return calculatorState.startingAmount;
     
@@ -313,7 +323,7 @@ export default function TableScreen() {
       calculatorState.startingAmount,
       calculatorState.monthlyAmount,
       calculatorState.customCAGR,
-      yearsElapsed,
+      Math.ceil(yearsElapsed),
       calculatorState.pauseAfterYears,
       calculatorState.boostAfterYears,
       calculatorState.boostAmount
@@ -475,12 +485,12 @@ export default function TableScreen() {
     <View style={styles.portfolioTableHeader}>
       <Text style={[styles.portfolioHeaderCell, styles.dateColumn]}>Date</Text>
       <Text style={[styles.portfolioHeaderCell, styles.amountColumn]}>Portfolio Amount</Text>
-      <Text style={[styles.portfolioHeaderCell, styles.varianceColumn]}>Variance</Text>
+      <Text style={[styles.portfolioHeaderCell, styles.varianceColumn]}>Variance vs Target</Text>
     </View>
   );
 
   const PortfolioTrackingRow = ({ entry, index }: { entry: PortfolioEntry; index: number }) => {
-    const targetValue = getCurrentTargetValue();
+    const targetValue = getCurrentTargetValue(entry.timestamp);
     const variance = entry.amount - targetValue;
     const variancePercentage = targetValue > 0 ? (variance / targetValue) * 100 : 0;
     
@@ -496,18 +506,20 @@ export default function TableScreen() {
           ) : (
             <TrendingDown size={16} color="#EF4444" />
           )}
-          <Text style={[
-            styles.varianceText,
-            { color: variance >= 0 ? '#00D4AA' : '#EF4444' }
-          ]}>
-            {variance >= 0 ? '+' : ''}{formatCurrency(variance)}
-          </Text>
-          <Text style={[
-            styles.variancePercentage,
-            { color: variance >= 0 ? '#00D4AA' : '#EF4444' }
-          ]}>
-            ({variancePercentage >= 0 ? '+' : ''}{variancePercentage.toFixed(1)}%)
-          </Text>
+          <View style={styles.varianceTextContainer}>
+            <Text style={[
+              styles.varianceText,
+              { color: variance >= 0 ? '#00D4AA' : '#EF4444' }
+            ]}>
+              {variance >= 0 ? '+' : ''}{formatCurrency(variance)}
+            </Text>
+            <Text style={[
+              styles.variancePercentage,
+              { color: variance >= 0 ? '#00D4AA' : '#EF4444' }
+            ]}>
+              ({variancePercentage >= 0 ? '+' : ''}{variancePercentage.toFixed(1)}%)
+            </Text>
+          </View>
         </View>
       </View>
     );
@@ -515,7 +527,7 @@ export default function TableScreen() {
 
   // Mobile Portfolio Card
   const MobilePortfolioCard = ({ entry, index }: { entry: PortfolioEntry; index: number }) => {
-    const targetValue = getCurrentTargetValue();
+    const targetValue = getCurrentTargetValue(entry.timestamp);
     const variance = entry.amount - targetValue;
     const variancePercentage = targetValue > 0 ? (variance / targetValue) * 100 : 0;
     
@@ -537,6 +549,10 @@ export default function TableScreen() {
           ]}>
             {variance >= 0 ? '+' : ''}{formatCurrency(variance)} ({variancePercentage >= 0 ? '+' : ''}{variancePercentage.toFixed(1)}%)
           </Text>
+        </View>
+        <View style={styles.mobileTargetInfo}>
+          <Target size={14} color="#94A3B8" />
+          <Text style={styles.mobileTargetText}>Target: {formatCurrency(targetValue)}</Text>
         </View>
       </View>
     );
@@ -619,23 +635,35 @@ export default function TableScreen() {
 
               {/* Portfolio Tracking Table */}
               <View style={styles.portfolioTableContainer}>
-                {isMobile ? (
-                  // Mobile Card View
-                  <View style={styles.mobilePortfolioContainer}>
-                    {portfolioEntries.map((entry, index) => (
-                      <MobilePortfolioCard key={entry.id} entry={entry} index={index} />
-                    ))}
+                {portfolioEntries.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Save size={48} color="#64748B" />
+                    <Text style={styles.emptyStateTitle}>No Portfolio Entries Yet</Text>
+                    <Text style={styles.emptyStateText}>
+                      Start tracking your actual portfolio value to see how you're performing against your target projections.
+                    </Text>
                   </View>
                 ) : (
-                  // Desktop Table View
-                  <View style={styles.portfolioTableScrollView}>
-                    <View style={styles.portfolioTable}>
-                      <PortfolioTrackingHeader />
-                      {portfolioEntries.map((entry, index) => (
-                        <PortfolioTrackingRow key={entry.id} entry={entry} index={index} />
-                      ))}
-                    </View>
-                  </View>
+                  <>
+                    {isMobile ? (
+                      // Mobile Card View
+                      <View style={styles.mobilePortfolioContainer}>
+                        {portfolioEntries.map((entry, index) => (
+                          <MobilePortfolioCard key={entry.id} entry={entry} index={index} />
+                        ))}
+                      </View>
+                    ) : (
+                      // Desktop Table View
+                      <View style={styles.portfolioTableScrollView}>
+                        <View style={styles.portfolioTable}>
+                          <PortfolioTrackingHeader />
+                          {portfolioEntries.map((entry, index) => (
+                            <PortfolioTrackingRow key={entry.id} entry={entry} index={index} />
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                  </>
                 )}
               </View>
             </View>
@@ -719,6 +747,13 @@ export default function TableScreen() {
                   </Text>
                 </View>
               )}
+
+              <View style={styles.phaseCard}>
+                <Text style={styles.phaseTitle}>📊 Portfolio Tracking Benefits</Text>
+                <Text style={styles.phaseText}>
+                  Track your actual portfolio value to see if you're ahead or behind your target projections. The variance column shows how much you're outperforming or underperforming your calculated strategy. Green indicates you're ahead of target, red means you're behind.
+                </Text>
+              </View>
               
               <View style={styles.phaseCard}>
                 <Text style={styles.phaseTitle}>💰 Invested vs 📈 Portfolio Value</Text>
@@ -726,13 +761,6 @@ export default function TableScreen() {
                   • <Text style={styles.boldText}>Invested</Text>: Total money you've put in{calculatorState.startingAmount > 0 ? ' (including starting amount)' : ''}{'\n'}
                   • <Text style={styles.boldText}>Portfolio Value</Text>: What your investment is worth (includes growth){'\n'}
                   • <Text style={styles.boldText}>Final Year Portfolio</Text>: {formatCurrency(yearlyData[yearlyData.length - 1]?.assetValue || 0)} ✨
-                </Text>
-              </View>
-
-              <View style={styles.phaseCard}>
-                <Text style={styles.phaseTitle}>📊 Portfolio Tracking Benefits</Text>
-                <Text style={styles.phaseText}>
-                  Track your actual portfolio value to see if you're ahead or behind your target projections. The variance column shows how much you're outperforming or underperforming your calculated strategy.
                 </Text>
               </View>
 
@@ -974,6 +1002,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.6)',
     borderRadius: 12,
     overflow: 'hidden',
+    minHeight: 200,
   },
   portfolioTableScrollView: {
     width: '100%',
@@ -1035,7 +1064,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
+  },
+  varianceTextContainer: {
+    alignItems: 'center',
   },
   varianceText: {
     fontFamily: 'Inter-SemiBold',
@@ -1049,6 +1081,7 @@ const styles = StyleSheet.create({
   // Mobile Portfolio Card Styles
   mobilePortfolioContainer: {
     gap: 12,
+    padding: 16,
   },
   mobilePortfolioCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -1085,11 +1118,44 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 16,
+    marginBottom: 8,
   },
   mobileVarianceText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     textAlign: 'center',
+  },
+  mobileTargetInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  mobileTargetText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
+  },
+
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 
   summaryContainer: {
