@@ -297,25 +297,8 @@ export default function SettingsScreen() {
             </AnimatedCard>
           )}
 
-          {/* Email Service Information */}
-          <AnimatedCard delay={600}>
-            <GlassCard style={styles.emailServiceContainer}>
-              <Text style={styles.emailServiceTitle}>📧 Email Service Information</Text>
-              <Text style={styles.emailServiceText}>
-                Freedom21 uses <Text style={styles.emailServiceHighlight}>Supabase Auth</Text> for secure account management. 
-                Email confirmations are currently <Text style={styles.emailServiceHighlight}>disabled</Text> for faster onboarding.
-              </Text>
-              <Text style={styles.emailServiceNote}>
-                💡 Accounts are created instantly without email verification. You can sign in immediately after creating your account.
-              </Text>
-              <Text style={styles.emailServiceNote}>
-                🔒 For password recovery, use the "Forgot password?" link on the sign-in screen to receive a reset email.
-              </Text>
-            </GlassCard>
-          </AnimatedCard>
-
           {/* Disclaimer */}
-          <AnimatedCard delay={700}>
+          <AnimatedCard delay={600}>
             <GlassCard style={styles.disclaimerContainer}>
               <Text style={styles.disclaimerTitle}>Important Disclaimer</Text>
               <Text style={styles.disclaimerText}>
@@ -328,7 +311,7 @@ export default function SettingsScreen() {
           </AnimatedCard>
 
           {/* Legal */}
-          <AnimatedCard delay={800}>
+          <AnimatedCard delay={700}>
             <View style={styles.legalContainer}>
               <TouchableOpacity style={styles.legalButton} activeOpacity={0.7}>
                 <Text style={styles.legalText}>Terms of Service</Text>
@@ -560,39 +543,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-Medium',
     color: '#94A3B8',
-  },
-  emailServiceContainer: {
-    marginBottom: 24,
-    paddingVertical: 24,
-    borderLeftWidth: 4,
-    borderLeftColor: '#00D4AA',
-  },
-  emailServiceTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#00D4AA',
-    marginBottom: 12,
-  },
-  emailServiceText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#94A3B8',
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  emailServiceHighlight: {
-    color: '#00D4AA',
-    fontFamily: 'Inter-SemiBold',
-  },
-  emailServiceNote: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#00D4AA',
-    backgroundColor: 'rgba(0, 212, 170, 0.1)',
-    padding: 12,
-    borderRadius: 8,
-    lineHeight: 18,
-    marginBottom: 8,
   },
   disclaimerContainer: {
     marginBottom: 24,
