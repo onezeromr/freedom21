@@ -14,6 +14,7 @@ import { PiggyBank, DollarSign, TrendingUp, Calendar, Info, Save, ChevronDown, X
 import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 import ModernSlider from '@/components/ModernSlider';
+import { usePortfolioSync } from '@/hooks/usePortfolioSync';
 
 const { width } = Dimensions.get('window');
 
@@ -25,26 +26,6 @@ interface RetirementETF {
   description: string;
   riskLevel: 'Low' | 'Medium' | 'High';
   tooltip: string;
-}
-
-interface CalculatorState {
-  startingAmount: number;
-  monthlyAmount: number;
-  years: number;
-  currentAge: number | null;
-  btcHurdleRate: number;
-  selectedAsset: string;
-  customCAGR: number;
-  pauseAfterYears: number | null;
-  boostAfterYears: number | null;
-  boostAmount: number;
-  useRealisticCAGR: boolean;
-  useDecliningRates: boolean;
-  phase1Rate: number;
-  phase2Rate: number;
-  phase3Rate: number;
-  inflationRate: number;
-  useInflationAdjustment: boolean;
 }
 
 interface Scenario {
@@ -87,11 +68,11 @@ const RETIREMENT_ETFS: RetirementETF[] = [
 ];
 
 export default function RetirementScreen() {
+  const { portfolioState } = usePortfolioSync();
   const [portfolioValue, setPortfolioValue] = useState(500000);
   const [selectedETF, setSelectedETF] = useState(RETIREMENT_ETFS[0]);
   const [withdrawalStrategy, setWithdrawalStrategy] = useState<'reinvest' | 'withdraw'>('withdraw');
   const [years, setYears] = useState(20);
-  const [calculatorState, setCalculatorState] = useState<CalculatorState | null>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [showScenarioModal, setShowScenarioModal] = useState(false);
   const [dataSource, setDataSource] = useState<'manual' | 'calculator' | 'scenario'>('manual');
@@ -110,163 +91,36 @@ export default function RetirementScreen() {
   useEffect(() => {
     mounted.current = true;
     
-    // Load calculator state and scenarios from localStorage and listen for changes
+    // Load scenarios from localStorage
     const loadData = () => {
       if (!mounted.current) return;
       
-      const savedState = localStorage.getItem('freedom21_calculator_state');
-      if (savedState && mounted.current) {
-        const state = JSON.parse(savedState);
-        setCalculatorState(state);
-        
-        // Calculate future value from calculator state and set as default
-        const futureValue = calculateFutureValueFromState(state);
-        if (futureValue > 0 && mounted.current) {
-          setPortfolioValue(futureValue);
-          setDataSource('calculator');
-        }
-      }
-
       const savedScenarios = localStorage.getItem('freedom21_scenarios');
       if (savedScenarios && mounted.current) {
         setScenarios(JSON.parse(savedScenarios));
       }
     };
 
-    // Load initial data
     loadData();
-
-    // Listen for storage changes (when calculator state updates)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (!mounted.current) return;
-      
-      if (e.key === 'freedom21_calculator_state' && e.newValue && mounted.current) {
-        const state = JSON.parse(e.newValue);
-        setCalculatorState(state);
-        
-        if (dataSource === 'calculator' && mounted.current) {
-          const futureValue = calculateFutureValueFromState(state);
-          setPortfolioValue(futureValue);
-        }
-      } else if (e.key === 'freedom21_scenarios' && e.newValue && mounted.current) {
-        setScenarios(JSON.parse(e.newValue));
-      }
-    };
-
-    // Listen for custom events (for same-tab updates)
-    const handleCalculatorUpdate = (event: CustomEvent) => {
-      if (!mounted.current) return;
-      
-      if (mounted.current) {
-        setCalculatorState(event.detail);
-        
-        if (dataSource === 'calculator' && mounted.current) {
-          const futureValue = calculateFutureValueFromState(event.detail);
-          setPortfolioValue(futureValue);
-        }
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('calculatorStateUpdate', handleCalculatorUpdate as EventListener);
 
     return () => {
       mounted.current = false;
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('calculatorStateUpdate', handleCalculatorUpdate as EventListener);
     };
-  }, [dataSource]);
+  }, []);
+
+  // Set portfolio value from calculator state when it loads
+  useEffect(() => {
+    if (portfolioState && dataSource === 'manual') {
+      setPortfolioValue(portfolioState.futureValue);
+      setDataSource('calculator');
+    }
+  }, [portfolioState]);
 
   useEffect(() => {
     if (mounted.current) {
       calculateRetirementProjections();
     }
   }, [portfolioValue, selectedETF, withdrawalStrategy, years]);
-
-  // Get the effective growth rate for a given year
-  const getEffectiveGrowthRate = (year: number, baseRate: number, state: CalculatorState): number => {
-    let rate = baseRate;
-    
-    // Apply realistic CAGR reduction if enabled
-    if (state.useRealisticCAGR) {
-      rate = rate * 0.6; // 60% of optimistic rate
-    }
-    
-    // Apply declining rates if enabled
-    if (state.useDecliningRates) {
-      if (year <= 10) {
-        rate = state.phase1Rate;
-      } else if (year <= 20) {
-        rate = state.phase2Rate;
-      } else {
-        rate = state.phase3Rate;
-      }
-      
-      // Still apply realistic reduction if both are enabled
-      if (state.useRealisticCAGR) {
-        rate = rate * 0.6;
-      }
-    }
-    
-    // Apply inflation adjustment if enabled
-    if (state.useInflationAdjustment) {
-      rate = rate - state.inflationRate;
-    }
-    
-    return Math.max(0, rate); // Ensure rate doesn't go negative
-  };
-
-  // Calculate year-by-year progression for complex strategies with starting amount
-  const calculateYearByYearProgression = (
-    startingAmount: number,
-    monthlyAmount: number,
-    baseGrowthRate: number,
-    targetYear: number,
-    pauseAfterYears: number | null,
-    boostAfterYears: number | null,
-    boostAmount: number,
-    state: CalculatorState
-  ): number => {
-    let totalValue = startingAmount; // Start with initial amount
-
-    for (let year = 1; year <= targetYear; year++) {
-      // Get effective growth rate for this year
-      const rate = getEffectiveGrowthRate(year, baseGrowthRate, state) / 100;
-      
-      // Determine monthly contribution for this year
-      let monthlyContrib = monthlyAmount;
-      
-      if (pauseAfterYears && year > pauseAfterYears) {
-        monthlyContrib = 0; // No contributions after pause
-      } else if (boostAfterYears && year > boostAfterYears) {
-        
-        monthlyContrib = boostAmount; // Boosted amount
-      }
-
-      // Add this year's contributions
-      const yearlyContrib = monthlyContrib * 12;
-
-      // Grow previous value and add new contributions
-      totalValue = totalValue * (1 + rate) + yearlyContrib;
-    }
-
-    return Math.round(totalValue);
-  };
-
-  const calculateFutureValueFromState = (state: CalculatorState): number => {
-    const { startingAmount, monthlyAmount, years, customCAGR, pauseAfterYears, boostAfterYears, boostAmount } = state;
-
-    return calculateYearByYearProgression(
-      startingAmount,
-      monthlyAmount,
-      customCAGR,
-      years,
-      pauseAfterYears,
-      boostAfterYears,
-      boostAmount,
-      state
-    );
-  };
 
   const calculateRetirementProjections = () => {
     if (!mounted.current) return;
@@ -313,10 +167,9 @@ export default function RetirementScreen() {
   };
 
   const switchToCalculator = () => {
-    if (!mounted.current || !calculatorState) return;
+    if (!mounted.current || !portfolioState) return;
     
-    const futureValue = calculateFutureValueFromState(calculatorState);
-    setPortfolioValue(futureValue);
+    setPortfolioValue(portfolioState.futureValue);
     setDataSource('calculator');
     setSelectedScenario(null);
   };
@@ -353,7 +206,7 @@ export default function RetirementScreen() {
   const getDataSourceLabel = () => {
     switch (dataSource) {
       case 'calculator':
-        return calculatorState ? `Calculator: ${calculatorState.selectedAsset} (${calculatorState.customCAGR}%)` : 'Calculator';
+        return portfolioState ? `Calculator: ${portfolioState.selectedAsset} (${portfolioState.customCAGR}%)` : 'Calculator';
       case 'scenario':
         return selectedScenario ? `Scenario: ${selectedScenario.name}` : 'Saved Scenario';
       default:
@@ -386,6 +239,21 @@ export default function RetirementScreen() {
     </TouchableOpacity>
   );
 
+  if (!portfolioState) {
+    return (
+      <View style={styles.container}>
+        <LinearGradient
+          colors={['#0A0E1A', '#1E293B', '#0F172A']}
+          style={styles.gradient}
+        >
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading portfolio data...</Text>
+          </View>
+        </LinearGradient>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -411,7 +279,7 @@ export default function RetirementScreen() {
             </View>
           </AnimatedCard>
 
-          {/* Data Source Selector - Improved Mobile Layout */}
+          {/* Data Source Selector */}
           <AnimatedCard delay={100}>
             <GlassCard style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -419,9 +287,8 @@ export default function RetirementScreen() {
                 <Text style={styles.sectionTitle}>Portfolio Value Source</Text>
               </View>
               
-              {/* Improved mobile-optimized layout */}
               <View style={[styles.sourceSelector, isMobile && styles.sourceSelectorMobile]}>
-                {calculatorState && (
+                {portfolioState && (
                   <TouchableOpacity
                     style={[
                       styles.sourceButton, 
@@ -811,6 +678,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
+  },
   header: {
     paddingTop: 60,
     paddingBottom: 30,
@@ -857,7 +734,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginLeft: 12,
   },
-  // Improved Source Selector - Mobile Optimized
   sourceSelector: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.05)',

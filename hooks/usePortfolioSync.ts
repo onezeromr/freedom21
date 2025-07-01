@@ -1,0 +1,413 @@
+import { useEffect, useState, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from './useAuth';
+
+export interface PortfolioState {
+  startingAmount: number;
+  monthlyAmount: number;
+  years: number;
+  currentAge: number | null;
+  btcHurdleRate: number;
+  selectedAsset: string;
+  customCAGR: number;
+  pauseAfterYears: number | null;
+  boostAfterYears: number | null;
+  boostAmount: number;
+  useRealisticCAGR: boolean;
+  useDecliningRates: boolean;
+  phase1Rate: number;
+  phase2Rate: number;
+  phase3Rate: number;
+  inflationRate: number;
+  useInflationAdjustment: boolean;
+  futureValue: number;
+  btcHurdleValue: number;
+  outperformance: number;
+  targetYear: number;
+  futureAge: number | null;
+  lastUpdated: string;
+}
+
+export interface PortfolioEntry {
+  id: string;
+  amount: number;
+  variance: number;
+  variance_percentage: number;
+  target: number;
+  created_at: string;
+}
+
+export function usePortfolioSync() {
+  const { user } = useAuth();
+  const [portfolioState, setPortfolioState] = useState<PortfolioState | null>(null);
+  const [portfolioEntries, setPortfolioEntries] = useState<PortfolioEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  // Load portfolio state from cloud or localStorage
+  const loadPortfolioState = useCallback(async () => {
+    setLoading(true);
+    
+    try {
+      if (user) {
+        // Load from cloud (user preferences)
+        const { data, error } = await supabase
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+
+        if (error && error.code !== 'PGRST116') { // Not found error
+          console.error('Error loading portfolio state from cloud:', error);
+        }
+
+        if (data) {
+          // Convert cloud data to portfolio state
+          const cloudState: PortfolioState = {
+            startingAmount: data.default_starting_amount || 0,
+            monthlyAmount: data.default_monthly_amount || 500,
+            years: data.default_years || 20,
+            currentAge: data.default_current_age,
+            btcHurdleRate: data.default_btc_hurdle_rate || 30,
+            selectedAsset: data.default_asset || 'BTC',
+            customCAGR: data.default_cagr || 30,
+            pauseAfterYears: null,
+            boostAfterYears: null,
+            boostAmount: 1000,
+            useRealisticCAGR: false,
+            useDecliningRates: false,
+            phase1Rate: 30,
+            phase2Rate: 20,
+            phase3Rate: 15,
+            inflationRate: 3,
+            useInflationAdjustment: false,
+            futureValue: 0,
+            btcHurdleValue: 0,
+            outperformance: 0,
+            targetYear: new Date().getFullYear() + (data.default_years || 20),
+            futureAge: data.default_current_age ? data.default_current_age + (data.default_years || 20) : null,
+            lastUpdated: data.updated_at,
+          };
+          
+          setPortfolioState(cloudState);
+          
+          // Also save to localStorage for offline access
+          localStorage.setItem('freedom21_calculator_state', JSON.stringify(cloudState));
+          return;
+        }
+      }
+
+      // Fallback to localStorage
+      const savedState = localStorage.getItem('freedom21_calculator_state');
+      if (savedState) {
+        const localState = JSON.parse(savedState);
+        setPortfolioState(localState);
+      }
+    } catch (error) {
+      console.error('Error loading portfolio state:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  // Save portfolio state to cloud and localStorage
+  const savePortfolioState = useCallback(async (state: Partial<PortfolioState>) => {
+    setSyncing(true);
+    
+    try {
+      const updatedState = { ...portfolioState, ...state, lastUpdated: new Date().toISOString() };
+      
+      // Save to localStorage immediately
+      localStorage.setItem('freedom21_calculator_state', JSON.stringify(updatedState));
+      setPortfolioState(updatedState);
+      
+      // Dispatch event for cross-tab sync
+      window.dispatchEvent(new CustomEvent('calculatorStateUpdate', { detail: updatedState }));
+
+      // Save to cloud if user is authenticated
+      if (user) {
+        const { error } = await supabase
+          .from('user_preferences')
+          .upsert({
+            user_id: user.id,
+            default_starting_amount: updatedState.startingAmount,
+            default_monthly_amount: updatedState.monthlyAmount,
+            default_years: updatedState.years,
+            default_current_age: updatedState.currentAge,
+            default_btc_hurdle_rate: updatedState.btcHurdleRate,
+            default_asset: updatedState.selectedAsset,
+            default_cagr: updatedState.customCAGR,
+            updated_at: new Date().toISOString(),
+          });
+
+        if (error) {
+          console.error('Error saving portfolio state to cloud:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving portfolio state:', error);
+    } finally {
+      setSyncing(false);
+    }
+  }, [user, portfolioState]);
+
+  // Load portfolio entries
+  const loadPortfolioEntries = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('portfolio_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading portfolio entries:', error);
+        return;
+      }
+
+      setPortfolioEntries(data || []);
+    } catch (error) {
+      console.error('Error loading portfolio entries:', error);
+    }
+  }, [user]);
+
+  // Save portfolio entry
+  const savePortfolioEntry = useCallback(async (amount: number, target: number) => {
+    if (!user) return;
+
+    try {
+      const variance = amount - target;
+      const variance_percentage = target > 0 ? (variance / target) * 100 : 0;
+
+      const { data, error } = await supabase
+        .from('portfolio_entries')
+        .insert({
+          user_id: user.id,
+          amount,
+          variance,
+          variance_percentage,
+          target,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving portfolio entry:', error);
+        return null;
+      }
+
+      // Reload entries
+      await loadPortfolioEntries();
+      return data;
+    } catch (error) {
+      console.error('Error saving portfolio entry:', error);
+      return null;
+    }
+  }, [user, loadPortfolioEntries]);
+
+  // Delete portfolio entry
+  const deletePortfolioEntry = useCallback(async (id: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('portfolio_entries')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error deleting portfolio entry:', error);
+        return;
+      }
+
+      // Reload entries
+      await loadPortfolioEntries();
+    } catch (error) {
+      console.error('Error deleting portfolio entry:', error);
+    }
+  }, [user, loadPortfolioEntries]);
+
+  // Calculate portfolio values based on current state
+  const calculatePortfolioValues = useCallback((state: PortfolioState) => {
+    // Get the effective growth rate for a given year
+    const getEffectiveGrowthRate = (year: number, baseRate: number): number => {
+      let rate = baseRate;
+      
+      if (state.useRealisticCAGR) {
+        rate = rate * 0.6;
+      }
+      
+      if (state.useDecliningRates) {
+        if (year <= 10) {
+          rate = state.phase1Rate;
+        } else if (year <= 20) {
+          rate = state.phase2Rate;
+        } else {
+          rate = state.phase3Rate;
+        }
+        
+        if (state.useRealisticCAGR) {
+          rate = rate * 0.6;
+        }
+      }
+      
+      if (state.useInflationAdjustment) {
+        rate = rate - state.inflationRate;
+      }
+      
+      return Math.max(0, rate);
+    };
+
+    // Calculate year-by-year progression
+    const calculateYearByYearProgression = (
+      startingAmount: number,
+      monthlyAmount: number,
+      baseGrowthRate: number,
+      targetYear: number,
+      pauseAfterYears: number | null = null,
+      boostAfterYears: number | null = null,
+      boostAmount: number = 0
+    ): number => {
+      let totalValue = startingAmount;
+
+      for (let year = 1; year <= targetYear; year++) {
+        const rate = getEffectiveGrowthRate(year, baseGrowthRate) / 100;
+        
+        let monthlyContrib = monthlyAmount;
+        
+        if (pauseAfterYears && year > pauseAfterYears) {
+          monthlyContrib = 0;
+        } else if (boostAfterYears && year > boostAfterYears) {
+          monthlyContrib = boostAmount;
+        }
+
+        const yearlyContrib = monthlyContrib * 12;
+        totalValue = totalValue * (1 + rate) + yearlyContrib;
+      }
+
+      return Math.max(0, Math.round(totalValue));
+    };
+
+    const futureValue = calculateYearByYearProgression(
+      state.startingAmount,
+      state.monthlyAmount,
+      state.customCAGR,
+      state.years,
+      state.pauseAfterYears,
+      state.boostAfterYears,
+      state.boostAmount
+    );
+
+    const btcHurdleValue = calculateYearByYearProgression(
+      state.startingAmount,
+      state.monthlyAmount,
+      state.btcHurdleRate,
+      state.years,
+      state.pauseAfterYears,
+      state.boostAfterYears,
+      state.boostAmount
+    );
+
+    const outperformance = futureValue - btcHurdleValue;
+    const currentYear = new Date().getFullYear();
+    const targetYear = currentYear + state.years;
+    const futureAge = state.currentAge ? state.currentAge + state.years : null;
+
+    return {
+      futureValue,
+      btcHurdleValue,
+      outperformance,
+      targetYear,
+      futureAge,
+    };
+  }, []);
+
+  // Update portfolio state with calculated values
+  const updatePortfolioState = useCallback(async (updates: Partial<PortfolioState>) => {
+    if (!portfolioState) return;
+
+    const newState = { ...portfolioState, ...updates };
+    const calculatedValues = calculatePortfolioValues(newState);
+    
+    await savePortfolioState({
+      ...newState,
+      ...calculatedValues,
+    });
+  }, [portfolioState, calculatePortfolioValues, savePortfolioState]);
+
+  // Initialize on mount
+  useEffect(() => {
+    loadPortfolioState();
+  }, [loadPortfolioState]);
+
+  // Load portfolio entries when user changes
+  useEffect(() => {
+    if (user) {
+      loadPortfolioEntries();
+    } else {
+      setPortfolioEntries([]);
+    }
+  }, [user, loadPortfolioEntries]);
+
+  // Listen for storage events (cross-tab sync)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'freedom21_calculator_state' && e.newValue) {
+        const newState = JSON.parse(e.newValue);
+        setPortfolioState(newState);
+      }
+    };
+
+    const handleCalculatorUpdate = (event: CustomEvent) => {
+      setPortfolioState(event.detail);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('calculatorStateUpdate', handleCalculatorUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('calculatorStateUpdate', handleCalculatorUpdate as EventListener);
+    };
+  }, []);
+
+  // Set up real-time subscription for portfolio entries
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('portfolio_entries_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'portfolio_entries',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          loadPortfolioEntries();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, loadPortfolioEntries]);
+
+  return {
+    portfolioState,
+    portfolioEntries,
+    loading,
+    syncing,
+    updatePortfolioState,
+    savePortfolioEntry,
+    deletePortfolioEntry,
+    loadPortfolioState,
+    loadPortfolioEntries,
+  };
+}

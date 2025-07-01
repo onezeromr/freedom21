@@ -12,11 +12,13 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Calculator, DollarSign, Calendar, TrendingUp, Save, Settings, ChevronDown, ChevronUp, Target, CirclePause as PauseCircle, Rocket, User, Sparkles } from 'lucide-react-native';
+import { Calculator, DollarSign, Calendar, TrendingUp, Save, Settings, ChevronDown, ChevronUp, Target, CirclePause as PauseCircle, Rocket, User, Sparkles, Cloud, CloudOff } from 'lucide-react-native';
 import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 import ModernSlider from '@/components/ModernSlider';
 import LiveCAGRDisplay from '@/components/LiveCAGRDisplay';
+import { usePortfolioSync } from '@/hooks/usePortfolioSync';
+import { useAuth } from '@/hooks/useAuth';
 
 const { width } = Dimensions.get('window');
 
@@ -58,6 +60,15 @@ const ASSET_OPTIONS = [
 ];
 
 export default function CalculatorScreen() {
+  const { user } = useAuth();
+  const { 
+    portfolioState, 
+    syncing, 
+    updatePortfolioState, 
+    loadPortfolioState 
+  } = usePortfolioSync();
+
+  // Local state for UI
   const [startingAmount, setStartingAmount] = useState(0);
   const [monthlyAmount, setMonthlyAmount] = useState(500);
   const [years, setYears] = useState(20);
@@ -83,161 +94,68 @@ export default function CalculatorScreen() {
 
   const isMobile = width < 768;
 
+  // Load portfolio state when it changes
   useEffect(() => {
-    // Load saved state from localStorage
-    const savedState = localStorage.getItem('freedom21_calculator_state');
-    if (savedState) {
-      const state = JSON.parse(savedState);
-      setStartingAmount(state.startingAmount || 0);
-      setMonthlyAmount(state.monthlyAmount || 500);
-      setYears(state.years || 20);
-      setCurrentAge(state.currentAge || null);
-      setBtcHurdleRate(state.btcHurdleRate || 30.0);
-      setSelectedAsset(state.selectedAsset || 'BTC');
-      setCustomCAGR(state.customCAGR || 30);
-      setPauseAfterYears(state.pauseAfterYears || null);
-      setBoostAfterYears(state.boostAfterYears || null);
-      setBoostAmount(state.boostAmount || 1000);
-      setUseRealisticCAGR(state.useRealisticCAGR || false);
-      setUseDecliningRates(state.useDecliningRates || false);
-      setPhase1Rate(state.phase1Rate || 30);
-      setPhase2Rate(state.phase2Rate || 20);
-      setPhase3Rate(state.phase3Rate || 15);
-      setInflationRate(state.inflationRate || 3);
-      setUseInflationAdjustment(state.useInflationAdjustment || false);
+    if (portfolioState) {
+      setStartingAmount(portfolioState.startingAmount);
+      setMonthlyAmount(portfolioState.monthlyAmount);
+      setYears(portfolioState.years);
+      setCurrentAge(portfolioState.currentAge);
+      setBtcHurdleRate(portfolioState.btcHurdleRate);
+      setSelectedAsset(portfolioState.selectedAsset);
+      setCustomCAGR(portfolioState.customCAGR);
+      setPauseAfterYears(portfolioState.pauseAfterYears);
+      setBoostAfterYears(portfolioState.boostAfterYears);
+      setBoostAmount(portfolioState.boostAmount);
+      setUseRealisticCAGR(portfolioState.useRealisticCAGR);
+      setUseDecliningRates(portfolioState.useDecliningRates);
+      setPhase1Rate(portfolioState.phase1Rate);
+      setPhase2Rate(portfolioState.phase2Rate);
+      setPhase3Rate(portfolioState.phase3Rate);
+      setInflationRate(portfolioState.inflationRate);
+      setUseInflationAdjustment(portfolioState.useInflationAdjustment);
     }
+  }, [portfolioState]);
 
-    // Load saved scenarios
+  // Load saved scenarios
+  useEffect(() => {
     const savedScenarios = localStorage.getItem('freedom21_scenarios');
     if (savedScenarios) {
       setScenarios(JSON.parse(savedScenarios));
     }
   }, []);
 
+  // Update portfolio state when values change
   useEffect(() => {
-    // Save state to localStorage whenever it changes
-    const state = {
-      startingAmount,
-      monthlyAmount,
-      years,
-      currentAge,
-      btcHurdleRate,
-      selectedAsset,
-      customCAGR,
-      pauseAfterYears,
-      boostAfterYears,
-      boostAmount,
-      useRealisticCAGR,
-      useDecliningRates,
-      phase1Rate,
-      phase2Rate,
-      phase3Rate,
-      inflationRate,
-      useInflationAdjustment,
-    };
-    
-    localStorage.setItem('freedom21_calculator_state', JSON.stringify(state));
-    
-    // Dispatch custom event for same-tab updates
-    window.dispatchEvent(new CustomEvent('calculatorStateUpdate', { detail: state }));
+    const timeoutId = setTimeout(() => {
+      updatePortfolioState({
+        startingAmount,
+        monthlyAmount,
+        years,
+        currentAge,
+        btcHurdleRate,
+        selectedAsset,
+        customCAGR,
+        pauseAfterYears,
+        boostAfterYears,
+        boostAmount,
+        useRealisticCAGR,
+        useDecliningRates,
+        phase1Rate,
+        phase2Rate,
+        phase3Rate,
+        inflationRate,
+        useInflationAdjustment,
+      });
+    }, 500); // Debounce updates
+
+    return () => clearTimeout(timeoutId);
   }, [
     startingAmount, monthlyAmount, years, currentAge, btcHurdleRate, 
     selectedAsset, customCAGR, pauseAfterYears, boostAfterYears, boostAmount,
     useRealisticCAGR, useDecliningRates, phase1Rate, phase2Rate, phase3Rate,
-    inflationRate, useInflationAdjustment
+    inflationRate, useInflationAdjustment, updatePortfolioState
   ]);
-
-  // Get the effective growth rate for a given year
-  const getEffectiveGrowthRate = (year: number, baseRate: number): number => {
-    let rate = baseRate;
-    
-    // Apply realistic CAGR reduction if enabled
-    if (useRealisticCAGR) {
-      rate = rate * 0.6; // 60% of optimistic rate
-    }
-    
-    // Apply declining rates if enabled
-    if (useDecliningRates) {
-      if (year <= 10) {
-        rate = phase1Rate;
-      } else if (year <= 20) {
-        rate = phase2Rate;
-      } else {
-        rate = phase3Rate;
-      }
-      
-      // Still apply realistic reduction if both are enabled
-      if (useRealisticCAGR) {
-        rate = rate * 0.6;
-      }
-    }
-    
-    // Apply inflation adjustment if enabled
-    if (useInflationAdjustment) {
-      rate = rate - inflationRate;
-    }
-    
-    return Math.max(0, rate); // Ensure rate doesn't go negative
-  };
-
-  // Calculate year-by-year progression for complex strategies with starting amount
-  const calculateYearByYearProgression = (
-    startingAmount: number,
-    monthlyAmount: number,
-    baseGrowthRate: number,
-    targetYear: number,
-    pauseAfterYears: number | null = null,
-    boostAfterYears: number | null = null,
-    boostAmount: number = 0
-  ): number => {
-    let totalValue = startingAmount; // Start with initial amount
-
-    for (let year = 1; year <= targetYear; year++) {
-      // Get effective growth rate for this year
-      const rate = getEffectiveGrowthRate(year, baseGrowthRate) / 100;
-      
-      // Determine monthly contribution for this year
-      let monthlyContrib = monthlyAmount;
-      
-      if (pauseAfterYears && year > pauseAfterYears) {
-        monthlyContrib = 0; // No contributions after pause
-      } else if (boostAfterYears && year > boostAfterYears) {
-        monthlyContrib = boostAmount; // Boosted amount
-      }
-
-      // Add this year's contributions
-      const yearlyContrib = monthlyContrib * 12;
-
-      // Grow previous value and add new contributions
-      totalValue = totalValue * (1 + rate) + yearlyContrib;
-    }
-
-    return Math.max(0, Math.round(totalValue)); // Ensure never negative
-  };
-
-  const calculateFutureValue = () => {
-    return calculateYearByYearProgression(
-      startingAmount,
-      monthlyAmount,
-      customCAGR,
-      years,
-      pauseAfterYears,
-      boostAfterYears,
-      boostAmount
-    );
-  };
-
-  const calculateBitcoinHurdleValue = () => {
-    return calculateYearByYearProgression(
-      startingAmount,
-      monthlyAmount,
-      btcHurdleRate,
-      years,
-      pauseAfterYears,
-      boostAfterYears,
-      boostAmount
-    );
-  };
 
   const handleAssetChange = (assetName: string) => {
     setSelectedAsset(assetName);
@@ -257,12 +175,10 @@ export default function CalculatorScreen() {
       return;
     }
 
-    const futureValue = calculateFutureValue();
-    const btcHurdleValue = calculateBitcoinHurdleValue();
-    const outperformance = futureValue - btcHurdleValue;
-    const currentYear = new Date().getFullYear();
-    const targetYear = currentYear + years;
-    const futureAge = currentAge ? currentAge + years : null;
+    if (!portfolioState) {
+      Alert.alert('Error', 'Portfolio state not loaded');
+      return;
+    }
 
     const newScenario: Scenario = {
       id: Date.now().toString(),
@@ -277,11 +193,11 @@ export default function CalculatorScreen() {
       pauseAfterYears,
       boostAfterYears,
       boostAmount,
-      futureValue,
-      btcHurdleValue,
-      outperformance,
-      targetYear,
-      futureAge,
+      futureValue: portfolioState.futureValue,
+      btcHurdleValue: portfolioState.btcHurdleValue,
+      outperformance: portfolioState.outperformance,
+      targetYear: portfolioState.targetYear,
+      futureAge: portfolioState.futureAge,
       createdAt: new Date().toISOString(),
       useRealisticCAGR,
       useDecliningRates,
@@ -308,13 +224,6 @@ export default function CalculatorScreen() {
       maximumFractionDigits: 0,
     }).format(amount);
   };
-
-  const futureValue = calculateFutureValue();
-  const btcHurdleValue = calculateBitcoinHurdleValue();
-  const outperformance = futureValue - btcHurdleValue;
-  const currentYear = new Date().getFullYear();
-  const targetYear = currentYear + years;
-  const futureAge = currentAge ? currentAge + years : null;
 
   const getEffectiveCAGR = () => {
     if (useDecliningRates) {
@@ -372,6 +281,22 @@ export default function CalculatorScreen() {
     </TouchableOpacity>
   );
 
+  // Show loading state if portfolio state is not loaded
+  if (!portfolioState) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient
+          colors={['#0A0E1A', '#1E293B', '#0F172A']}
+          style={styles.gradient}
+        >
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading portfolio state...</Text>
+          </View>
+        </LinearGradient>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
@@ -387,6 +312,26 @@ export default function CalculatorScreen() {
               </View>
               <Text style={styles.title}>Wealth Calculator</Text>
               <Text style={styles.subtitle}>Build your financial future with smart investing</Text>
+              
+              {/* Cloud Sync Indicator */}
+              <View style={styles.syncIndicator}>
+                {syncing ? (
+                  <>
+                    <Cloud size={16} color="#00D4AA" />
+                    <Text style={styles.syncText}>Syncing...</Text>
+                  </>
+                ) : user ? (
+                  <>
+                    <Cloud size={16} color="#00D4AA" />
+                    <Text style={styles.syncText}>Synced to cloud</Text>
+                  </>
+                ) : (
+                  <>
+                    <CloudOff size={16} color="#64748B" />
+                    <Text style={[styles.syncText, { color: '#64748B' }]}>Local only</Text>
+                  </>
+                )}
+              </View>
             </View>
           </AnimatedCard>
 
@@ -452,10 +397,10 @@ export default function CalculatorScreen() {
                 formatValue={(val) => currentAge ? `${val} years old` : 'Not set'}
                 color="#00D4AA"
               />
-              {futureAge && (
+              {portfolioState.futureAge && (
                 <View style={styles.ageProjection}>
                   <Text style={styles.ageProjectionText}>
-                    🎯 You'll be {futureAge} years old in {targetYear}
+                    🎯 You'll be {portfolioState.futureAge} years old in {portfolioState.targetYear}
                   </Text>
                 </View>
               )}
@@ -743,10 +688,10 @@ export default function CalculatorScreen() {
               >
                 <TrendingUp size={32} color="#FFFFFF" style={styles.resultIcon} />
                 <Text style={styles.resultTitle}>Portfolio Value</Text>
-                <Text style={styles.resultValue}>{formatCurrency(futureValue)}</Text>
+                <Text style={styles.resultValue}>{formatCurrency(portfolioState.futureValue)}</Text>
                 <View style={styles.resultDetails}>
-                  <Text style={styles.resultYear}>Year {targetYear}</Text>
-                  {futureAge && <Text style={styles.resultAge}>Age {futureAge}</Text>}
+                  <Text style={styles.resultYear}>Year {portfolioState.targetYear}</Text>
+                  {portfolioState.futureAge && <Text style={styles.resultAge}>Age {portfolioState.futureAge}</Text>}
                 </View>
               </LinearGradient>
 
@@ -755,7 +700,7 @@ export default function CalculatorScreen() {
                 <View style={styles.comparisonCard}>
                   <Text style={styles.comparisonLabel}>Bitcoin Hurdle</Text>
                   <Text style={styles.comparisonValue}>
-                    {formatCurrency(btcHurdleValue)}
+                    {formatCurrency(portfolioState.btcHurdleValue)}
                   </Text>
                   <Text style={styles.comparisonRate}>{btcHurdleRate}% CAGR</Text>
                 </View>
@@ -764,19 +709,19 @@ export default function CalculatorScreen() {
                   <Text style={styles.comparisonLabel}>Outperformance</Text>
                   <Text style={[
                     styles.comparisonValue,
-                    { color: outperformance >= 0 ? '#00D4AA' : '#EF4444' }
+                    { color: portfolioState.outperformance >= 0 ? '#00D4AA' : '#EF4444' }
                   ]}>
-                    {outperformance >= 0 ? '+' : ''}{formatCurrency(outperformance)}
+                    {portfolioState.outperformance >= 0 ? '+' : ''}{formatCurrency(portfolioState.outperformance)}
                   </Text>
                   <Text style={styles.comparisonRate}>
-                    {outperformance >= 0 ? 'Above' : 'Below'} Bitcoin
+                    {portfolioState.outperformance >= 0 ? 'Above' : 'Below'} Bitcoin
                   </Text>
                 </View>
               </View>
             </View>
           </AnimatedCard>
 
-          {/* Save Scenario - Improved Mobile Layout */}
+          {/* Save Scenario */}
           <AnimatedCard delay={1100}>
             <GlassCard style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -784,7 +729,6 @@ export default function CalculatorScreen() {
                 <Text style={styles.sectionTitle}>Save Scenario</Text>
               </View>
               
-              {/* Improved mobile-optimized layout */}
               <View style={styles.saveContainer}>
                 <View style={styles.inputWrapper}>
                   <Text style={styles.saveInputLabel}>Scenario Name</Text>
@@ -830,6 +774,16 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
+  },
   header: {
     paddingTop: 20,
     paddingBottom: 30,
@@ -854,6 +808,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Medium',
     color: '#94A3B8',
+    marginBottom: 12,
+  },
+  syncIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
+  },
+  syncText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#00D4AA',
   },
   section: {
     marginBottom: 24,
@@ -1199,7 +1168,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#64748B',
   },
-  // Improved Save Scenario Layout - Clean and spacious
   saveContainer: {
     marginBottom: 16,
   },

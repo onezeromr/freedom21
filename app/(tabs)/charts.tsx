@@ -13,50 +13,13 @@ import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 import ModernChart from '@/components/ModernChart';
 import CompoundInterestChart from '@/components/CompoundInterestChart';
+import { usePortfolioSync } from '@/hooks/usePortfolioSync';
 
 const { width } = Dimensions.get('window');
 
-interface CalculatorState {
-  startingAmount: number;
-  monthlyAmount: number;
-  years: number;
-  currentAge: number | null;
-  btcHurdleRate: number;
-  selectedAsset: string;
-  customCAGR: number;
-  pauseAfterYears: number | null;
-  boostAfterYears: number | null;
-  boostAmount: number;
-  useRealisticCAGR: boolean;
-  useDecliningRates: boolean;
-  phase1Rate: number;
-  phase2Rate: number;
-  phase3Rate: number;
-  inflationRate: number;
-  useInflationAdjustment: boolean;
-}
-
 export default function ChartsScreen() {
+  const { portfolioState } = usePortfolioSync();
   const [selectedTimeframe, setSelectedTimeframe] = useState('20Y');
-  const [calculatorState, setCalculatorState] = useState<CalculatorState>({
-    startingAmount: 0,
-    monthlyAmount: 500,
-    years: 20,
-    currentAge: null,
-    btcHurdleRate: 30.0,
-    selectedAsset: 'BTC',
-    customCAGR: 30,
-    pauseAfterYears: null,
-    boostAfterYears: null,
-    boostAmount: 1000,
-    useRealisticCAGR: false,
-    useDecliningRates: false,
-    phase1Rate: 30,
-    phase2Rate: 20,
-    phase3Rate: 15,
-    inflationRate: 3,
-    useInflationAdjustment: false,
-  });
   const [chartData, setChartData] = useState<any[]>([]);
   const mounted = useRef(true);
 
@@ -64,90 +27,52 @@ export default function ChartsScreen() {
 
   useEffect(() => {
     mounted.current = true;
-    
-    // Load calculator state from localStorage and listen for changes
-    const loadCalculatorState = () => {
-      if (!mounted.current) return;
-      
-      const savedState = localStorage.getItem('freedom21_calculator_state');
-      if (savedState && mounted.current) {
-        const parsedState = JSON.parse(savedState);
-        setCalculatorState(parsedState);
-        setSelectedTimeframe(`${parsedState.years}Y`);
-      }
-    };
-
-    // Load initial state
-    loadCalculatorState();
-
-    // Listen for storage changes (when calculator state updates)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (!mounted.current) return;
-      
-      if (e.key === 'freedom21_calculator_state' && e.newValue && mounted.current) {
-        const parsedState = JSON.parse(e.newValue);
-        setCalculatorState(parsedState);
-        setSelectedTimeframe(`${parsedState.years}Y`);
-      }
-    };
-
-    // Listen for custom events (for same-tab updates)
-    const handleCalculatorUpdate = (event: CustomEvent) => {
-      if (!mounted.current) return;
-      
-      if (mounted.current) {
-        setCalculatorState(event.detail);
-        setSelectedTimeframe(`${event.detail.years}Y`);
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('calculatorStateUpdate', handleCalculatorUpdate as EventListener);
-
     return () => {
       mounted.current = false;
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('calculatorStateUpdate', handleCalculatorUpdate as EventListener);
     };
   }, []);
 
   useEffect(() => {
-    if (mounted.current) {
+    if (portfolioState) {
+      setSelectedTimeframe(`${portfolioState.years}Y`);
+    }
+  }, [portfolioState]);
+
+  useEffect(() => {
+    if (mounted.current && portfolioState) {
       generateChartData();
     }
-  }, [selectedTimeframe, calculatorState]);
+  }, [selectedTimeframe, portfolioState]);
 
   // Get the effective growth rate for a given year
   const getEffectiveGrowthRate = (year: number, baseRate: number): number => {
+    if (!portfolioState) return baseRate;
+    
     let rate = baseRate;
     
-    // Apply realistic CAGR reduction if enabled
-    if (calculatorState.useRealisticCAGR) {
-      rate = rate * 0.6; // 60% of optimistic rate
+    if (portfolioState.useRealisticCAGR) {
+      rate = rate * 0.6;
     }
     
-    // Apply declining rates if enabled
-    if (calculatorState.useDecliningRates) {
+    if (portfolioState.useDecliningRates) {
       if (year <= 10) {
-        rate = calculatorState.phase1Rate;
+        rate = portfolioState.phase1Rate;
       } else if (year <= 20) {
-        rate = calculatorState.phase2Rate;
+        rate = portfolioState.phase2Rate;
       } else {
-        rate = calculatorState.phase3Rate;
+        rate = portfolioState.phase3Rate;
       }
       
-      // Still apply realistic reduction if both are enabled
-      if (calculatorState.useRealisticCAGR) {
+      if (portfolioState.useRealisticCAGR) {
         rate = rate * 0.6;
       }
     }
     
-    // Apply inflation adjustment if enabled
-    if (calculatorState.useInflationAdjustment) {
-      rate = rate - calculatorState.inflationRate;
+    if (portfolioState.useInflationAdjustment) {
+      rate = rate - portfolioState.inflationRate;
     }
     
-    return Math.max(0, rate); // Ensure rate doesn't go negative
+    return Math.max(0, rate);
   };
 
   // Calculate year-by-year progression for complex strategies with starting amount
@@ -160,36 +85,31 @@ export default function ChartsScreen() {
     boostAfterYears: number | null,
     boostAmount: number
   ): number => {
-    let totalValue = startingAmount; // Start with initial amount
+    let totalValue = startingAmount;
 
     for (let year = 1; year <= targetYear; year++) {
-      // Get effective growth rate for this year
       const rate = getEffectiveGrowthRate(year, baseGrowthRate) / 100;
       
-      // Determine monthly contribution for this year
       let monthlyContrib = monthlyAmount;
       
       if (pauseAfterYears && year > pauseAfterYears) {
-        monthlyContrib = 0; // No contributions after pause
+        monthlyContrib = 0;
       } else if (boostAfterYears && year > boostAfterYears) {
-        monthlyContrib = boostAmount; // Boosted amount
+        monthlyContrib = boostAmount;
       }
 
-      // Add this year's contributions
       const yearlyContrib = monthlyContrib * 12;
-
-      // Grow previous value and add new contributions
       totalValue = totalValue * (1 + rate) + yearlyContrib;
     }
 
-    return Math.max(0, Math.round(totalValue)); // Ensure never negative
+    return Math.max(0, Math.round(totalValue));
   };
 
   const generateChartData = () => {
-    if (!mounted.current) return;
+    if (!mounted.current || !portfolioState) return;
     
     const years = parseInt(selectedTimeframe);
-    const { startingAmount, monthlyAmount, customCAGR, btcHurdleRate, pauseAfterYears, boostAfterYears, boostAmount } = calculatorState;
+    const { startingAmount, monthlyAmount, customCAGR, btcHurdleRate, pauseAfterYears, boostAfterYears, boostAmount } = portfolioState;
     
     const data = [];
     const dataPoints = Math.min(10, Math.max(5, Math.floor(years / 2)));
@@ -295,49 +215,68 @@ export default function ChartsScreen() {
     </TouchableOpacity>
   );
 
-  const finalAssetValue = chartData[chartData.length - 1]?.asset || 0;
-  const finalBitcoinValue = chartData[chartData.length - 1]?.bitcoin || 0;
-  const outperformance = finalAssetValue - finalBitcoinValue;
-
   const getStrategyText = () => {
+    if (!portfolioState) return 'Standard DCA';
+    
     const strategies = [];
     
-    if (calculatorState.useRealisticCAGR) {
+    if (portfolioState.useRealisticCAGR) {
       strategies.push('Conservative CAGR');
     }
     
-    if (calculatorState.useDecliningRates) {
-      strategies.push(`Declining Rates (${calculatorState.phase1Rate}%→${calculatorState.phase2Rate}%→${calculatorState.phase3Rate}%)`);
+    if (portfolioState.useDecliningRates) {
+      strategies.push(`Declining Rates (${portfolioState.phase1Rate}%→${portfolioState.phase2Rate}%→${portfolioState.phase3Rate}%)`);
     }
     
-    if (calculatorState.useInflationAdjustment) {
-      strategies.push(`Inflation Adjusted (-${calculatorState.inflationRate}%)`);
+    if (portfolioState.useInflationAdjustment) {
+      strategies.push(`Inflation Adjusted (-${portfolioState.inflationRate}%)`);
     }
     
-    if (calculatorState.pauseAfterYears) {
-      strategies.push(`Pause after ${calculatorState.pauseAfterYears}Y`);
-    } else if (calculatorState.boostAfterYears) {
-      strategies.push(`Boost after ${calculatorState.boostAfterYears}Y to ${formatCurrency(calculatorState.boostAmount)}`);
+    if (portfolioState.pauseAfterYears) {
+      strategies.push(`Pause after ${portfolioState.pauseAfterYears}Y`);
+    } else if (portfolioState.boostAfterYears) {
+      strategies.push(`Boost after ${portfolioState.boostAfterYears}Y to ${formatCurrency(portfolioState.boostAmount)}`);
     }
     
     return strategies.length > 0 ? strategies.join(' • ') : 'Standard DCA';
   };
 
   const getEffectiveCAGR = () => {
-    if (calculatorState.useDecliningRates) {
-      return `${calculatorState.phase1Rate}%→${calculatorState.phase2Rate}%→${calculatorState.phase3Rate}%`;
+    if (!portfolioState) return '30%';
+    
+    if (portfolioState.useDecliningRates) {
+      return `${portfolioState.phase1Rate}%→${portfolioState.phase2Rate}%→${portfolioState.phase3Rate}%`;
     }
     
-    let rate = calculatorState.customCAGR;
-    if (calculatorState.useRealisticCAGR) {
+    let rate = portfolioState.customCAGR;
+    if (portfolioState.useRealisticCAGR) {
       rate = rate * 0.6;
     }
-    if (calculatorState.useInflationAdjustment) {
-      rate = rate - calculatorState.inflationRate;
+    if (portfolioState.useInflationAdjustment) {
+      rate = rate - portfolioState.inflationRate;
     }
     
     return `${rate.toFixed(1)}%`;
   };
+
+  if (!portfolioState) {
+    return (
+      <View style={styles.container}>
+        <LinearGradient
+          colors={['#0A0E1A', '#1E293B', '#0F172A']}
+          style={styles.gradient}
+        >
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading portfolio data...</Text>
+          </View>
+        </LinearGradient>
+      </View>
+    );
+  }
+
+  const finalAssetValue = chartData[chartData.length - 1]?.asset || 0;
+  const finalBitcoinValue = chartData[chartData.length - 1]?.bitcoin || 0;
+  const outperformance = finalAssetValue - finalBitcoinValue;
 
   return (
     <View style={styles.container}>
@@ -358,14 +297,14 @@ export default function ChartsScreen() {
               </View>
               <Text style={styles.title}>Investment Growth</Text>
               <Text style={styles.subtitle}>
-                {calculatorState.selectedAsset} vs Bitcoin Hurdle Rate Benchmark
+                {portfolioState.selectedAsset} vs Bitcoin Hurdle Rate Benchmark
               </Text>
               <Text style={styles.configText}>
-                {calculatorState.startingAmount > 0 && `${formatCurrency(calculatorState.startingAmount)} start + `}
-                ${calculatorState.monthlyAmount}/mo • {getEffectiveCAGR()} growth • {getStrategyText()}
+                {portfolioState.startingAmount > 0 && `${formatCurrency(portfolioState.startingAmount)} start + `}
+                ${portfolioState.monthlyAmount}/mo • {getEffectiveCAGR()} growth • {getStrategyText()}
               </Text>
               <Text style={styles.benchmarkNote}>
-                📊 Bitcoin benchmark uses same strategy with {calculatorState.btcHurdleRate}% CAGR
+                📊 Bitcoin benchmark uses same strategy with {portfolioState.btcHurdleRate}% CAGR
               </Text>
             </View>
           </AnimatedCard>
@@ -373,14 +312,14 @@ export default function ChartsScreen() {
           {/* Compound Interest Chart */}
           <AnimatedCard delay={100}>
             <CompoundInterestChart
-              startingAmount={calculatorState.startingAmount}
-              monthlyAmount={calculatorState.monthlyAmount}
-              annualRate={calculatorState.useDecliningRates ? calculatorState.phase1Rate : calculatorState.customCAGR}
+              startingAmount={portfolioState.startingAmount}
+              monthlyAmount={portfolioState.monthlyAmount}
+              annualRate={portfolioState.useDecliningRates ? portfolioState.phase1Rate : portfolioState.customCAGR}
               years={parseInt(selectedTimeframe)}
-              assetName={calculatorState.selectedAsset}
-              pauseAfterYears={calculatorState.pauseAfterYears}
-              boostAfterYears={calculatorState.boostAfterYears}
-              boostAmount={calculatorState.boostAmount}
+              assetName={portfolioState.selectedAsset}
+              pauseAfterYears={portfolioState.pauseAfterYears}
+              boostAfterYears={portfolioState.boostAfterYears}
+              boostAmount={portfolioState.boostAmount}
             />
           </AnimatedCard>
 
@@ -406,7 +345,7 @@ export default function ChartsScreen() {
               <Text style={styles.chartTitle}>Portfolio Value Comparison</Text>
               <ModernChart
                 data={chartData}
-                assetName={calculatorState.selectedAsset}
+                assetName={portfolioState.selectedAsset}
                 assetColor="#00D4AA"
                 bitcoinColor="#F59E0B"
               />
@@ -422,7 +361,7 @@ export default function ChartsScreen() {
                 <View style={styles.metricCard}>
                   <View style={styles.metricHeader}>
                     <View style={[styles.metricIndicator, { backgroundColor: '#00D4AA' }]} />
-                    <Text style={styles.metricLabel}>{calculatorState.selectedAsset}</Text>
+                    <Text style={styles.metricLabel}>{portfolioState.selectedAsset}</Text>
                   </View>
                   <Text style={styles.metricValue}>
                     {formatCurrency(finalAssetValue)}
@@ -465,9 +404,9 @@ export default function ChartsScreen() {
             <View style={styles.insightsContainer}>
               <Text style={styles.insightsTitle}>💡 Compound Interest Insights</Text>
               <View style={styles.insightsList}>
-                {calculatorState.startingAmount > 0 && (
+                {portfolioState.startingAmount > 0 && (
                   <Text style={styles.insightText}>
-                    💰 Starting with {formatCurrency(calculatorState.startingAmount)} gives your money more time to compound and grow
+                    💰 Starting with {formatCurrency(portfolioState.startingAmount)} gives your money more time to compound and grow
                   </Text>
                 )}
                 <Text style={styles.insightText}>
@@ -477,19 +416,19 @@ export default function ChartsScreen() {
                   🚀 Compound Interest (green layer) = exponential growth where your gains earn gains - this is the magic!
                 </Text>
                 <Text style={styles.insightText}>
-                  💡 {calculatorState.pauseAfterYears ? 'Pausing contributions allows compound growth to work its magic' : calculatorState.boostAfterYears ? 'Boosting contributions later accelerates wealth building significantly' : 'Monthly dollar-cost averaging helps smooth market volatility'}
+                  💡 {portfolioState.pauseAfterYears ? 'Pausing contributions allows compound growth to work its magic' : portfolioState.boostAfterYears ? 'Boosting contributions later accelerates wealth building significantly' : 'Monthly dollar-cost averaging helps smooth market volatility'}
                 </Text>
-                {calculatorState.useRealisticCAGR && (
+                {portfolioState.useRealisticCAGR && (
                   <Text style={styles.insightText}>
                     🎯 Conservative CAGR (60% of optimistic) provides more realistic projections for planning
                   </Text>
                 )}
-                {calculatorState.useDecliningRates && (
+                {portfolioState.useDecliningRates && (
                   <Text style={styles.insightText}>
                     📉 Declining growth rates reflect how high-growth assets typically mature over time
                   </Text>
                 )}
-                {calculatorState.useInflationAdjustment && (
+                {portfolioState.useInflationAdjustment && (
                   <Text style={styles.insightText}>
                     💸 Inflation adjustment shows real purchasing power growth, not just nominal returns
                   </Text>
@@ -532,6 +471,16 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
   },
   header: {
     paddingTop: 60,
