@@ -10,7 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Table, Calendar, DollarSign, TrendingUp, Save, Plus, TrendingDown, Target } from 'lucide-react-native';
+import { Table, Calendar, DollarSign, TrendingUp, Save, Plus, TrendingDown, Target, Trash2 } from 'lucide-react-native';
 import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 
@@ -108,6 +108,12 @@ export default function TableScreen() {
             date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
             amount: 25500,
             timestamp: Date.now() - 30 * 24 * 60 * 60 * 1000,
+          },
+          {
+            id: 'sample-3',
+            date: new Date().toLocaleDateString(),
+            amount: 26000,
+            timestamp: Date.now(),
           },
         ];
         setPortfolioEntries(sampleEntries);
@@ -310,26 +316,38 @@ export default function TableScreen() {
     Alert.alert('Success', 'Portfolio amount saved successfully!');
   };
 
-  const getCurrentTargetValue = (entryTimestamp: number): number => {
-    // Calculate how many months have passed since the calculator's start date
-    const startDate = new Date(2024, 0, 1); // Assume start of 2024 as baseline
-    const entryDate = new Date(entryTimestamp);
-    const monthsElapsed = Math.max(0, Math.floor((entryDate.getTime() - startDate.getTime()) / (30.44 * 24 * 60 * 60 * 1000)));
-    const yearsElapsed = monthsElapsed / 12;
-    
-    if (yearsElapsed <= 0) return calculatorState.startingAmount;
-    
-    const result = calculateYearByYearProgression(
+  const deletePortfolioEntry = (id: string) => {
+    Alert.alert(
+      'Delete Entry',
+      'Are you sure you want to delete this portfolio entry?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            const updatedEntries = portfolioEntries.filter(entry => entry.id !== id);
+            setPortfolioEntries(updatedEntries);
+            localStorage.setItem('freedom21_portfolio_entries', JSON.stringify(updatedEntries));
+          },
+        },
+      ]
+    );
+  };
+
+  // Simple target calculation: Use Year 1 total from calculator
+  const getTargetValue = (): number => {
+    const year1Result = calculateYearByYearProgression(
       calculatorState.startingAmount,
       calculatorState.monthlyAmount,
       calculatorState.customCAGR,
-      Math.ceil(yearsElapsed),
+      1, // Year 1
       calculatorState.pauseAfterYears,
       calculatorState.boostAfterYears,
       calculatorState.boostAmount
     );
     
-    return result.value;
+    return year1Result.value;
   };
 
   const formatCurrency = (amount: number) => {
@@ -486,11 +504,12 @@ export default function TableScreen() {
       <Text style={[styles.portfolioHeaderCell, styles.dateColumn]}>Date</Text>
       <Text style={[styles.portfolioHeaderCell, styles.amountColumn]}>Portfolio Amount</Text>
       <Text style={[styles.portfolioHeaderCell, styles.varianceColumn]}>Variance vs Target</Text>
+      <Text style={[styles.portfolioHeaderCell, styles.actionColumn]}>Action</Text>
     </View>
   );
 
   const PortfolioTrackingRow = ({ entry, index }: { entry: PortfolioEntry; index: number }) => {
-    const targetValue = getCurrentTargetValue(entry.timestamp);
+    const targetValue = getTargetValue();
     const variance = entry.amount - targetValue;
     const variancePercentage = targetValue > 0 ? (variance / targetValue) * 100 : 0;
     
@@ -521,13 +540,22 @@ export default function TableScreen() {
             </Text>
           </View>
         </View>
+        <View style={[styles.portfolioCell, styles.actionColumn]}>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => deletePortfolioEntry(entry.id)}
+            activeOpacity={0.7}
+          >
+            <Trash2 size={16} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
       </View>
     );
   };
 
   // Mobile Portfolio Card
   const MobilePortfolioCard = ({ entry, index }: { entry: PortfolioEntry; index: number }) => {
-    const targetValue = getCurrentTargetValue(entry.timestamp);
+    const targetValue = getTargetValue();
     const variance = entry.amount - targetValue;
     const variancePercentage = targetValue > 0 ? (variance / targetValue) * 100 : 0;
     
@@ -535,7 +563,16 @@ export default function TableScreen() {
       <View style={[styles.mobilePortfolioCard, index % 2 === 0 && styles.mobilePortfolioCardEven]}>
         <View style={styles.mobilePortfolioHeader}>
           <Text style={styles.mobilePortfolioDate}>{entry.date}</Text>
-          <Text style={styles.mobilePortfolioAmount}>{formatCurrency(entry.amount)}</Text>
+          <View style={styles.mobilePortfolioActions}>
+            <Text style={styles.mobilePortfolioAmount}>{formatCurrency(entry.amount)}</Text>
+            <TouchableOpacity
+              style={styles.mobileDeleteButton}
+              onPress={() => deletePortfolioEntry(entry.id)}
+              activeOpacity={0.7}
+            >
+              <Trash2 size={16} color="#EF4444" />
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={styles.mobilePortfolioVariance}>
           {variance >= 0 ? (
@@ -552,7 +589,7 @@ export default function TableScreen() {
         </View>
         <View style={styles.mobileTargetInfo}>
           <Target size={14} color="#94A3B8" />
-          <Text style={styles.mobileTargetText}>Target: {formatCurrency(targetValue)}</Text>
+          <Text style={styles.mobileTargetText}>Target (Year 1): {formatCurrency(targetValue)}</Text>
         </View>
       </View>
     );
@@ -594,7 +631,7 @@ export default function TableScreen() {
             <View style={styles.portfolioTrackingContainer}>
               <Text style={styles.portfolioTrackingTitle}>📊 Portfolio Tracking</Text>
               <Text style={styles.portfolioTrackingDescription}>
-                Track your actual portfolio value over time and see how you're performing against your target projections
+                Track your actual portfolio value over time and see how you're performing against your Year 1 target projection of {formatCurrency(getTargetValue())}
               </Text>
               
               {/* Input Section */}
@@ -640,7 +677,7 @@ export default function TableScreen() {
                     <Save size={48} color="#64748B" />
                     <Text style={styles.emptyStateTitle}>No Portfolio Entries Yet</Text>
                     <Text style={styles.emptyStateText}>
-                      Start tracking your actual portfolio value to see how you're performing against your target projections.
+                      Start tracking your actual portfolio value to see how you're performing against your Year 1 target of {formatCurrency(getTargetValue())}.
                     </Text>
                   </View>
                 ) : (
@@ -747,13 +784,6 @@ export default function TableScreen() {
                   </Text>
                 </View>
               )}
-
-              <View style={styles.phaseCard}>
-                <Text style={styles.phaseTitle}>📊 Portfolio Tracking Benefits</Text>
-                <Text style={styles.phaseText}>
-                  Track your actual portfolio value to see if you're ahead or behind your target projections. The variance column shows how much you're outperforming or underperforming your calculated strategy. Green indicates you're ahead of target, red means you're behind.
-                </Text>
-              </View>
               
               <View style={styles.phaseCard}>
                 <Text style={styles.phaseTitle}>💰 Invested vs 📈 Portfolio Value</Text>
@@ -761,6 +791,13 @@ export default function TableScreen() {
                   • <Text style={styles.boldText}>Invested</Text>: Total money you've put in{calculatorState.startingAmount > 0 ? ' (including starting amount)' : ''}{'\n'}
                   • <Text style={styles.boldText}>Portfolio Value</Text>: What your investment is worth (includes growth){'\n'}
                   • <Text style={styles.boldText}>Final Year Portfolio</Text>: {formatCurrency(yearlyData[yearlyData.length - 1]?.assetValue || 0)} ✨
+                </Text>
+              </View>
+
+              <View style={styles.phaseCard}>
+                <Text style={styles.phaseTitle}>📊 Portfolio Tracking Target Explained</Text>
+                <Text style={styles.phaseText}>
+                  The target value for portfolio tracking is your <Text style={styles.boldText}>Year 1 projected portfolio value: {formatCurrency(getTargetValue())}</Text>. This represents what your portfolio should be worth after one year of following your current investment strategy. Green variance means you're ahead of this target, red means you're behind.
                 </Text>
               </View>
 
@@ -837,6 +874,9 @@ export default function TableScreen() {
               </Text>
               <Text style={styles.benchmarkExplanation}>
                 🎯 Final Portfolio Value: {formatCurrency(yearlyData[yearlyData.length - 1]?.assetValue || 0)} (matches Calculator tab!)
+              </Text>
+              <Text style={styles.targetExplanation}>
+                📊 Portfolio Tracking Target: {formatCurrency(getTargetValue())} (Year 1 projection from your current calculator settings)
               </Text>
             </View>
           </AnimatedCard>
@@ -1051,6 +1091,10 @@ const styles = StyleSheet.create({
     flex: 2,
     minWidth: 160,
   },
+  actionColumn: {
+    flex: 0.5,
+    minWidth: 60,
+  },
   dateText: {
     fontFamily: 'Inter-SemiBold',
     color: '#94A3B8',
@@ -1076,6 +1120,13 @@ const styles = StyleSheet.create({
   variancePercentage: {
     fontFamily: 'Inter-Medium',
     fontSize: 12,
+  },
+  deleteButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
   },
 
   // Mobile Portfolio Card Styles
@@ -1104,10 +1155,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#94A3B8',
   },
+  mobilePortfolioActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   mobilePortfolioAmount: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
     color: '#00D4AA',
+  },
+  mobileDeleteButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
   },
   mobilePortfolioVariance: {
     flexDirection: 'row',
@@ -1268,11 +1331,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#00D4AA',
     marginBottom: 4,
-  },
-  mobilePortfolioAmount: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#00D4AA',
   },
   mobileMetrics: {
     flexDirection: 'row',
@@ -1523,5 +1581,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(0, 212, 170, 0.2)',
+    marginBottom: 8,
+  },
+  targetExplanation: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#8B5CF6',
+    textAlign: 'center',
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.2)',
   },
 });
