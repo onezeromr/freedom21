@@ -147,7 +147,7 @@ export default function CalculatorScreen() {
         inflationRate,
         useInflationAdjustment,
       });
-    }, 1000); // 1 second debounce
+    }, 1500); // 1.5 second debounce to reduce sync frequency
 
     return () => clearTimeout(timeoutId);
   }, [
@@ -313,25 +313,27 @@ export default function CalculatorScreen() {
               <Text style={styles.title}>Wealth Calculator</Text>
               <Text style={styles.subtitle}>Build your financial future with smart investing</Text>
               
-              {/* Cloud Sync Indicator - Only show when actually syncing or when signed in */}
-              {(syncing || user) && (
+              {/* Cloud Sync Indicator - Only show when syncing or when signed in and not syncing */}
+              {user && (
                 <View style={styles.syncIndicator}>
                   {syncing ? (
                     <>
                       <Cloud size={16} color="#00D4AA" />
                       <Text style={styles.syncText}>Syncing...</Text>
                     </>
-                  ) : user ? (
+                  ) : (
                     <>
                       <Cloud size={16} color="#00D4AA" />
                       <Text style={styles.syncText}>Synced to cloud</Text>
                     </>
-                  ) : (
-                    <>
-                      <CloudOff size={16} color="#64748B" />
-                      <Text style={[styles.syncText, { color: '#64748B' }]}>Local only</Text>
-                    </>
                   )}
+                </View>
+              )}
+              
+              {!user && (
+                <View style={styles.syncIndicator}>
+                  <CloudOff size={16} color="#64748B" />
+                  <Text style={[styles.syncText, { color: '#64748B' }]}>Local only</Text>
                 </View>
               )}
             </View>

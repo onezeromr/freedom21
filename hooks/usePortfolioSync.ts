@@ -45,6 +45,31 @@ export function usePortfolioSync() {
   const [syncing, setSyncing] = useState(false);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSyncedStateRef = useRef<string>('');
+  const isInitialLoadRef = useRef(true);
+
+  // Helper function to create a comparable state hash (excluding calculated values)
+  const createStateHash = useCallback((state: PortfolioState) => {
+    const inputState = {
+      startingAmount: state.startingAmount,
+      monthlyAmount: state.monthlyAmount,
+      years: state.years,
+      currentAge: state.currentAge,
+      btcHurdleRate: state.btcHurdleRate,
+      selectedAsset: state.selectedAsset,
+      customCAGR: state.customCAGR,
+      pauseAfterYears: state.pauseAfterYears,
+      boostAfterYears: state.boostAfterYears,
+      boostAmount: state.boostAmount,
+      useRealisticCAGR: state.useRealisticCAGR,
+      useDecliningRates: state.useDecliningRates,
+      phase1Rate: state.phase1Rate,
+      phase2Rate: state.phase2Rate,
+      phase3Rate: state.phase3Rate,
+      inflationRate: state.inflationRate,
+      useInflationAdjustment: state.useInflationAdjustment,
+    };
+    return JSON.stringify(inputState);
+  }, []);
 
   // Load portfolio state from cloud or localStorage
   const loadPortfolioState = useCallback(async () => {
@@ -91,13 +116,18 @@ export function usePortfolioSync() {
             lastUpdated: data.updated_at,
           };
           
-          setPortfolioState(cloudState);
+          // Calculate values for the loaded state
+          const calculatedValues = calculatePortfolioValues(cloudState);
+          const completeState = { ...cloudState, ...calculatedValues };
+          
+          setPortfolioState(completeState);
           
           // Also save to localStorage for offline access
-          localStorage.setItem('freedom21_calculator_state', JSON.stringify(cloudState));
+          localStorage.setItem('freedom21_calculator_state', JSON.stringify(completeState));
           
           // Update last synced state reference
-          lastSyncedStateRef.current = JSON.stringify(cloudState);
+          lastSyncedStateRef.current = createStateHash(completeState);
+          isInitialLoadRef.current = false;
           return;
         }
       }
@@ -106,8 +136,14 @@ export function usePortfolioSync() {
       const savedState = localStorage.getItem('freedom21_calculator_state');
       if (savedState) {
         const localState = JSON.parse(savedState);
-        setPortfolioState(localState);
-        lastSyncedStateRef.current = savedState;
+        
+        // Ensure calculated values are present
+        const calculatedValues = calculatePortfolioValues(localState);
+        const completeState = { ...localState, ...calculatedValues };
+        
+        setPortfolioState(completeState);
+        lastSyncedStateRef.current = createStateHash(completeState);
+        isInitialLoadRef.current = false;
       }
     } catch (error) {
       console.error('Error loading portfolio state:', error);
@@ -118,24 +154,26 @@ export function usePortfolioSync() {
 
   // Save portfolio state to cloud and localStorage
   const savePortfolioState = useCallback(async (state: Partial<PortfolioState>) => {
+    if (!portfolioState) return;
+    
     try {
       const updatedState = { ...portfolioState, ...state, lastUpdated: new Date().toISOString() };
-      const stateString = JSON.stringify(updatedState);
+      const newStateHash = createStateHash(updatedState);
       
-      // Check if state actually changed
-      if (stateString === lastSyncedStateRef.current) {
-        return; // No changes, don't sync
+      // Check if the input state actually changed (ignore calculated values)
+      if (newStateHash === lastSyncedStateRef.current && !isInitialLoadRef.current) {
+        return; // No meaningful changes, don't sync
       }
       
       // Save to localStorage immediately
-      localStorage.setItem('freedom21_calculator_state', stateString);
+      localStorage.setItem('freedom21_calculator_state', JSON.stringify(updatedState));
       setPortfolioState(updatedState);
       
       // Dispatch event for cross-tab sync
       window.dispatchEvent(new CustomEvent('calculatorStateUpdate', { detail: updatedState }));
 
       // Only sync to cloud if user is authenticated and state actually changed
-      if (user) {
+      if (user && newStateHash !== lastSyncedStateRef.current) {
         setSyncing(true);
         
         // Clear any existing timeout
@@ -166,19 +204,23 @@ export function usePortfolioSync() {
               console.error('Error saving portfolio state to cloud:', error);
             } else {
               // Update last synced state reference only on successful sync
-              lastSyncedStateRef.current = stateString;
+              lastSyncedStateRef.current = newStateHash;
             }
           } catch (error) {
             console.error('Error saving portfolio state to cloud:', error);
           } finally {
             setSyncing(false);
           }
-        }, 1000); // 1 second debounce
+        }, 2000); // 2 second debounce to reduce frequent syncing
       }
+      
+      // Update the reference for non-cloud saves too
+      lastSyncedStateRef.current = newStateHash;
+      isInitialLoadRef.current = false;
     } catch (error) {
       console.error('Error saving portfolio state:', error);
     }
-  }, [user, portfolioState]);
+  }, [user, portfolioState, createStateHash]);
 
   // Load portfolio entries
   const loadPortfolioEntries = useCallback(async () => {
@@ -387,13 +429,13 @@ export function usePortfolioSync() {
       if (e.key === 'freedom21_calculator_state' && e.newValue) {
         const newState = JSON.parse(e.newValue);
         setPortfolioState(newState);
-        lastSyncedStateRef.current = e.newValue;
+        lastSyncedStateRef.current = createStateHash(newState);
       }
     };
 
     const handleCalculatorUpdate = (event: CustomEvent) => {
       setPortfolioState(event.detail);
-      lastSyncedStateRef.current = JSON.stringify(event.detail);
+      lastSyncedStateRef.current = createStateHash(event.detail);
     };
 
     window.addEventListener('storage', handleStorageChange);
@@ -403,7 +445,7 @@ export function usePortfolioSync() {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('calculatorStateUpdate', handleCalculatorUpdate as EventListener);
     };
-  }, []);
+  }, [createStateHash]);
 
   // Set up real-time subscription for portfolio entries
   useEffect(() => {
