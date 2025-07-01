@@ -131,7 +131,7 @@ export default function TableScreen() {
 
   useEffect(() => {
     loadPortfolioEntries();
-  }, [user]);
+  }, [user, calculatorState]); // Added calculatorState dependency to regenerate sample entries
 
   // Load portfolio entries from Supabase or localStorage
   const loadPortfolioEntries = async () => {
@@ -180,28 +180,44 @@ export default function TableScreen() {
         setPortfolioEntries([]);
       }
     } else {
-      // Add sample entries for demonstration - monthly tracking with amounts similar to monthly contribution
-      const monthlyContribution = calculatorState.monthlyAmount;
-      const sampleEntries = [
-        {
-          id: 'sample-1',
-          date: '1/1/2025',
-          amount: monthlyContribution * 1.1, // Slightly above monthly contribution
-          variance: monthlyContribution * 0.1,
-          variancePercentage: 10.0,
-          target: monthlyContribution,
-        },
-        {
-          id: 'sample-2',
-          date: '12/1/2024',
-          amount: monthlyContribution * 0.95, // Slightly below monthly contribution
-          variance: -monthlyContribution * 0.05,
-          variancePercentage: -5.0,
-          target: monthlyContribution,
-        },
-      ];
-      setPortfolioEntries(sampleEntries);
+      // Generate sample entries with recent dates and year-based targets
+      generateSampleEntries();
     }
+  };
+
+  // Generate sample entries with recent dates and year-based targets
+  const generateSampleEntries = () => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const monthlyContribution = calculatorState.monthlyAmount;
+    
+    // Create dates for current month and last month
+    const currentMonthDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    
+    // Get targets for current year (Year 1 of investment plan)
+    const currentYearTarget = getTargetValueForYear(currentYear);
+    
+    const sampleEntries = [
+      {
+        id: 'sample-1',
+        date: currentMonthDate.toLocaleDateString(),
+        amount: monthlyContribution * 1.1, // 10% above monthly contribution
+        variance: monthlyContribution * 0.1,
+        variancePercentage: 10.0,
+        target: currentYearTarget,
+      },
+      {
+        id: 'sample-2',
+        date: lastMonthDate.toLocaleDateString(),
+        amount: monthlyContribution * 0.95, // 5% below monthly contribution
+        variance: -monthlyContribution * 0.05,
+        variancePercentage: -5.0,
+        target: currentYearTarget,
+      },
+    ];
+    
+    setPortfolioEntries(sampleEntries);
   };
 
   // Save portfolio entry to Supabase or localStorage
@@ -414,21 +430,32 @@ export default function TableScreen() {
     setYearlyData(data);
   };
 
-  // Get Year 1 target value
-  const getTargetValue = (): number => {
+  // Get target value for a specific year (year-based targets)
+  const getTargetValueForYear = (entryYear: number): number => {
+    const currentYear = new Date().getFullYear();
+    const yearsSinceStart = entryYear - currentYear + 1; // +1 because we want Year 1 for current year
+    
+    // Ensure we're looking at least at Year 1
+    const targetYear = Math.max(1, yearsSinceStart);
+    
     const { startingAmount, monthlyAmount, customCAGR, pauseAfterYears, boostAfterYears, boostAmount } = calculatorState;
     
     const result = calculateYearByYearProgression(
       startingAmount,
       monthlyAmount,
       customCAGR,
-      1, // Year 1
+      targetYear,
       pauseAfterYears,
       boostAfterYears,
       boostAmount
     );
     
     return result.value;
+  };
+
+  // Get Year 1 target value (for current entries)
+  const getTargetValue = (): number => {
+    return getTargetValueForYear(new Date().getFullYear());
   };
 
   const handleSaveEntry = async () => {
@@ -454,12 +481,14 @@ export default function TableScreen() {
 
     setLoading(true);
 
-    const target = getTargetValue();
+    // Use year-based target calculation
+    const entryDate = new Date();
+    const target = getTargetValueForYear(entryDate.getFullYear());
     const variance = amount - target;
     const variancePercentage = target > 0 ? (variance / target) * 100 : 0;
 
     const success = await savePortfolioEntry({
-      date: new Date().toLocaleDateString(),
+      date: entryDate.toLocaleDateString(),
       amount,
       variance,
       variancePercentage,
@@ -550,54 +579,67 @@ export default function TableScreen() {
   );
 
   // Mobile Card View Component for Portfolio Entries
-  const MobilePortfolioCard = ({ entry, index }: { entry: PortfolioEntry; index: number }) => (
-    <View style={[styles.mobilePortfolioCard, index % 2 === 0 && styles.mobileCardEven]}>
-      <View style={styles.mobilePortfolioHeader}>
-        <View style={styles.mobilePortfolioDate}>
-          <Calendar size={16} color="#00D4AA" />
-          <Text style={styles.mobilePortfolioDateText}>{entry.date}</Text>
+  const MobilePortfolioCard = ({ entry, index }: { entry: PortfolioEntry; index: number }) => {
+    // Parse the entry date to determine which year's target to use
+    const entryDate = new Date(entry.date);
+    const entryYear = entryDate.getFullYear();
+    const yearBasedTarget = getTargetValueForYear(entryYear);
+    
+    // Recalculate variance based on year-specific target
+    const yearBasedVariance = entry.amount - yearBasedTarget;
+    const yearBasedVariancePercentage = yearBasedTarget > 0 ? (yearBasedVariance / yearBasedTarget) * 100 : 0;
+    
+    return (
+      <View style={[styles.mobilePortfolioCard, index % 2 === 0 && styles.mobileCardEven]}>
+        <View style={styles.mobilePortfolioHeader}>
+          <View style={styles.mobilePortfolioDate}>
+            <Calendar size={16} color="#00D4AA" />
+            <Text style={styles.mobilePortfolioDateText}>{entry.date}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.mobileDeleteButton}
+            onPress={() => handleDeleteEntry(entry.id)}
+            activeOpacity={0.7}
+          >
+            <Trash2 size={16} color="#EF4444" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.mobileDeleteButton}
-          onPress={() => handleDeleteEntry(entry.id)}
-          activeOpacity={0.7}
-        >
-          <Trash2 size={16} color="#EF4444" />
-        </TouchableOpacity>
-      </View>
 
-      <View style={styles.mobilePortfolioContent}>
-        <View style={styles.mobilePortfolioAmount}>
-          <Text style={styles.mobilePortfolioLabel}>Portfolio Value</Text>
-          <Text style={styles.mobilePortfolioValue}>{formatCurrency(entry.amount)}</Text>
-        </View>
+        <View style={styles.mobilePortfolioContent}>
+          <View style={styles.mobilePortfolioAmount}>
+            <Text style={styles.mobilePortfolioLabel}>Portfolio Value</Text>
+            <Text style={styles.mobilePortfolioValue}>{formatCurrency(entry.amount)}</Text>
+          </View>
 
-        <View style={styles.mobilePortfolioVariance}>
-          <Text style={styles.mobilePortfolioLabel}>vs Target</Text>
-          <View style={styles.mobileVarianceContainer}>
-            <TrendingUp 
-              size={14} 
-              color={entry.variance >= 0 ? '#00D4AA' : '#EF4444'} 
-              style={entry.variance < 0 ? { transform: [{ rotate: '180deg' }] } : undefined}
-            />
-            <Text style={[
-              styles.mobileVarianceText,
-              { color: entry.variance >= 0 ? '#00D4AA' : '#EF4444' }
-            ]}>
-              {entry.variance >= 0 ? '+' : ''}{formatCompactCurrency(entry.variance)}
+          <View style={styles.mobilePortfolioVariance}>
+            <Text style={styles.mobilePortfolioLabel}>vs Target</Text>
+            <View style={styles.mobileVarianceContainer}>
+              <TrendingUp 
+                size={14} 
+                color={yearBasedVariance >= 0 ? '#00D4AA' : '#EF4444'} 
+                style={yearBasedVariance < 0 ? { transform: [{ rotate: '180deg' }] } : undefined}
+              />
+              <Text style={[
+                styles.mobileVarianceText,
+                { color: yearBasedVariance >= 0 ? '#00D4AA' : '#EF4444' }
+              ]}>
+                {yearBasedVariance >= 0 ? '+' : ''}{formatCompactCurrency(yearBasedVariance)}
+              </Text>
+            </View>
+            <Text style={styles.mobileVariancePercentage}>
+              ({yearBasedVariance >= 0 ? '+' : ''}{yearBasedVariancePercentage.toFixed(1)}%)
             </Text>
           </View>
-          <Text style={styles.mobileVariancePercentage}>
-            ({entry.variance >= 0 ? '+' : ''}{entry.variancePercentage.toFixed(1)}%)
+        </View>
+
+        <View style={styles.mobilePortfolioTarget}>
+          <Text style={styles.mobileTargetLabel}>
+            Target ({entryYear}): {formatCurrency(yearBasedTarget)}
           </Text>
         </View>
       </View>
-
-      <View style={styles.mobilePortfolioTarget}>
-        <Text style={styles.mobileTargetLabel}>Target (Year 1): {formatCurrency(entry.target)}</Text>
-      </View>
-    </View>
-  );
+    );
+  };
 
   // Desktop Table Components
   const PortfolioTableHeader = () => (
@@ -609,41 +651,55 @@ export default function TableScreen() {
     </View>
   );
 
-  const PortfolioTableRow = ({ entry, index }: { entry: PortfolioEntry; index: number }) => (
-    <View style={[styles.portfolioTableRow, index % 2 === 0 && styles.portfolioTableRowEven]}>
-      <Text style={[styles.portfolioCell, styles.dateColumn, styles.portfolioDateText]}>{entry.date}</Text>
-      <Text style={[styles.portfolioCell, styles.amountColumn, styles.portfolioAmountText]}>
-        {formatCurrency(entry.amount)}
-      </Text>
-      <View style={[styles.portfolioCell, styles.varianceColumn, styles.portfolioVarianceCell]}>
-        <View style={styles.varianceContainer}>
-          <TrendingUp 
-            size={16} 
-            color={entry.variance >= 0 ? '#00D4AA' : '#EF4444'} 
-            style={entry.variance < 0 ? { transform: [{ rotate: '180deg' }] } : undefined}
-          />
-          <Text style={[
-            styles.varianceText,
-            { color: entry.variance >= 0 ? '#00D4AA' : '#EF4444' }
-          ]}>
-            {entry.variance >= 0 ? '+' : ''}{formatCurrency(entry.variance)}
+  const PortfolioTableRow = ({ entry, index }: { entry: PortfolioEntry; index: number }) => {
+    // Parse the entry date to determine which year's target to use
+    const entryDate = new Date(entry.date);
+    const entryYear = entryDate.getFullYear();
+    const yearBasedTarget = getTargetValueForYear(entryYear);
+    
+    // Recalculate variance based on year-specific target
+    const yearBasedVariance = entry.amount - yearBasedTarget;
+    const yearBasedVariancePercentage = yearBasedTarget > 0 ? (yearBasedVariance / yearBasedTarget) * 100 : 0;
+    
+    return (
+      <View style={[styles.portfolioTableRow, index % 2 === 0 && styles.portfolioTableRowEven]}>
+        <Text style={[styles.portfolioCell, styles.dateColumn, styles.portfolioDateText]}>{entry.date}</Text>
+        <Text style={[styles.portfolioCell, styles.amountColumn, styles.portfolioAmountText]}>
+          {formatCurrency(entry.amount)}
+        </Text>
+        <View style={[styles.portfolioCell, styles.varianceColumn, styles.portfolioVarianceCell]}>
+          <View style={styles.varianceContainer}>
+            <TrendingUp 
+              size={16} 
+              color={yearBasedVariance >= 0 ? '#00D4AA' : '#EF4444'} 
+              style={yearBasedVariance < 0 ? { transform: [{ rotate: '180deg' }] } : undefined}
+            />
+            <Text style={[
+              styles.varianceText,
+              { color: yearBasedVariance >= 0 ? '#00D4AA' : '#EF4444' }
+            ]}>
+              {yearBasedVariance >= 0 ? '+' : ''}{formatCurrency(yearBasedVariance)}
+            </Text>
+          </View>
+          <Text style={styles.variancePercentage}>
+            ({yearBasedVariance >= 0 ? '+' : ''}{yearBasedVariancePercentage.toFixed(1)}%)
+          </Text>
+          <Text style={styles.targetYearText}>
+            Target ({entryYear}): {formatCurrency(yearBasedTarget)}
           </Text>
         </View>
-        <Text style={styles.variancePercentage}>
-          ({entry.variance >= 0 ? '+' : ''}{entry.variancePercentage.toFixed(1)}%)
-        </Text>
+        <View style={[styles.portfolioCell, styles.actionColumn]}>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDeleteEntry(entry.id)}
+            activeOpacity={0.7}
+          >
+            <Trash2 size={16} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
       </View>
-      <View style={[styles.portfolioCell, styles.actionColumn]}>
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDeleteEntry(entry.id)}
-          activeOpacity={0.7}
-        >
-          <Trash2 size={16} color="#EF4444" />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   const YearlyTableHeader = () => (
     <View style={styles.tableHeader}>
@@ -814,7 +870,7 @@ export default function TableScreen() {
                 </View>
               </View>
 
-              {/* Portfolio Entries Table/Cards */}
+              {/* Portfolio Entries Table/Cards - Always show if there are entries */}
               {portfolioEntries.length > 0 && (
                 <View style={styles.portfolioEntriesContainer}>
                   {isMobile ? (
@@ -916,29 +972,24 @@ export default function TableScreen() {
           {/* Target Explanation */}
           <AnimatedCard delay={400}>
             <View style={styles.targetExplanationContainer}>
-              <Text style={styles.targetExplanationTitle}>🎯 How Your Target is Calculated</Text>
+              <Text style={styles.targetExplanationTitle}>🎯 How Year-Based Targets Work</Text>
               <View style={styles.targetExplanationCard}>
                 <Text style={styles.targetExplanationText}>
-                  Your target value of <Text style={styles.targetHighlight}>{formatCurrency(getTargetValue())}</Text> represents what your portfolio should be worth after 1 year of following your current investment strategy:
+                  Portfolio entries are now compared against the target for their respective year:
                 </Text>
                 <View style={styles.targetBreakdown}>
                   <Text style={styles.targetBreakdownItem}>
-                    • Monthly Investment: {formatCurrency(calculatorState.monthlyAmount)}
+                    • <Text style={styles.targetHighlight}>2025 entries</Text>: Compared to Year 1 target ({formatCurrency(getTargetValueForYear(2025))})
                   </Text>
                   <Text style={styles.targetBreakdownItem}>
-                    • Expected Growth Rate: {getEffectiveCAGR()}
+                    • <Text style={styles.targetHighlight}>2026 entries</Text>: Compared to Year 2 target ({formatCurrency(getTargetValueForYear(2026))})
                   </Text>
                   <Text style={styles.targetBreakdownItem}>
-                    • Strategy: {getStrategyText()}
+                    • <Text style={styles.targetHighlight}>Future years</Text>: Automatically calculated based on your investment timeline
                   </Text>
-                  {calculatorState.startingAmount > 0 && (
-                    <Text style={styles.targetBreakdownItem}>
-                      • Starting Amount: {formatCurrency(calculatorState.startingAmount)}
-                    </Text>
-                  )}
                 </View>
                 <Text style={styles.targetNote}>
-                  💡 This target updates automatically when you change your calculator settings, giving you a realistic 1-year milestone to track against.
+                  💡 This gives you accurate progress tracking as your portfolio grows over multiple years, with realistic targets for each stage of your investment journey.
                 </Text>
               </View>
             </View>
@@ -1296,6 +1347,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Medium',
     color: '#94A3B8',
+    marginBottom: 2,
+  },
+  targetYearText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+    color: '#64748B',
   },
   deleteButton: {
     padding: 8,
