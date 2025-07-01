@@ -180,31 +180,24 @@ export default function TableScreen() {
         setPortfolioEntries([]);
       }
     } else {
-      // Add sample entries for demonstration
+      // Add sample entries for demonstration - monthly tracking with amounts similar to monthly contribution
+      const monthlyContribution = calculatorState.monthlyAmount;
       const sampleEntries = [
         {
           id: 'sample-1',
-          date: '7/1/2025',
-          amount: 26000,
-          variance: 19400,
-          variancePercentage: 294.0,
-          target: 6600,
+          date: '1/1/2025',
+          amount: monthlyContribution * 1.1, // Slightly above monthly contribution
+          variance: monthlyContribution * 0.1,
+          variancePercentage: 10.0,
+          target: monthlyContribution,
         },
         {
           id: 'sample-2',
-          date: '6/1/2025',
-          amount: 25500,
-          variance: 18900,
-          variancePercentage: 286.4,
-          target: 6600,
-        },
-        {
-          id: 'sample-3',
-          date: '5/2/2025',
-          amount: 22000,
-          variance: 15400,
-          variancePercentage: 233.3,
-          target: 6600,
+          date: '12/1/2024',
+          amount: monthlyContribution * 0.95, // Slightly below monthly contribution
+          variance: -monthlyContribution * 0.05,
+          variancePercentage: -5.0,
+          target: monthlyContribution,
         },
       ];
       setPortfolioEntries(sampleEntries);
@@ -775,43 +768,49 @@ export default function TableScreen() {
                 <View style={styles.portfolioTrackingTitleContainer}>
                   <Text style={styles.portfolioTrackingTitle}>📊 Portfolio Tracking</Text>
                   <Text style={styles.portfolioTrackingSubtitle}>
-                    Track your actual portfolio value over time and see how you're performing against your Year 1 target projection of {formatCurrency(getTargetValue())}
+                    Track your actual portfolio value monthly and see how you're performing against your Year 1 target projection of {formatCurrency(getTargetValue())}. Regular monthly updates help you stay on track with your investment goals.
                   </Text>
                 </View>
               </View>
 
-              {/* Input Section */}
+              {/* Input Section - Fixed to stay within card margins */}
               <View style={styles.inputSection}>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Actual Portfolio Amount</Text>
-                  <View style={styles.inputRow}>
-                    <TextInput
-                      style={[styles.portfolioInput, error ? styles.portfolioInputError : null]}
-                      placeholder="Enter current portfolio value"
-                      placeholderTextColor="#64748B"
-                      value={currentAmount}
-                      onChangeText={(text) => {
-                        setCurrentAmount(text);
-                        setError('');
-                      }}
-                      keyboardType="numeric"
-                    />
-                    <TouchableOpacity
-                      style={[styles.saveButton, loading && styles.saveButtonDisabled]}
-                      onPress={handleSaveEntry}
-                      disabled={loading}
-                      activeOpacity={0.8}
+                <Text style={styles.inputLabel}>Actual Portfolio Amount</Text>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={[styles.portfolioInput, error ? styles.portfolioInputError : null]}
+                    placeholder="Enter current portfolio value"
+                    placeholderTextColor="#64748B"
+                    value={currentAmount}
+                    onChangeText={(text) => {
+                      setCurrentAmount(text);
+                      setError('');
+                    }}
+                    keyboardType="numeric"
+                  />
+                  <TouchableOpacity
+                    style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+                    onPress={handleSaveEntry}
+                    disabled={loading}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={['#00D4AA', '#00A887']}
+                      style={styles.saveButtonGradient}
                     >
-                      <LinearGradient
-                        colors={['#00D4AA', '#00A887']}
-                        style={styles.saveButtonGradient}
-                      >
-                        <Plus size={20} color="#FFFFFF" />
-                        <Text style={styles.saveButtonText}>Save</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  </View>
-                  {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                      <Plus size={20} color="#FFFFFF" />
+                      <Text style={styles.saveButtonText}>Save</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                
+                {/* Monthly tracking encouragement */}
+                <View style={styles.monthlyEncouragement}>
+                  <Calendar size={16} color="#00D4AA" />
+                  <Text style={styles.monthlyEncouragementText}>
+                    💡 Track monthly to build a habit and see your progress over time
+                  </Text>
                 </View>
               </View>
 
@@ -1053,12 +1052,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Input Section Styles
+  // Input Section Styles - Fixed to stay within margins
   inputSection: {
     marginBottom: 24,
-  },
-  inputContainer: {
-    marginBottom: 8,
   },
   inputLabel: {
     fontSize: 16,
@@ -1070,6 +1066,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     alignItems: 'flex-start',
+    marginBottom: 12,
   },
   portfolioInput: {
     flex: 1,
@@ -1114,6 +1111,23 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#EF4444',
     marginTop: 8,
+  },
+  monthlyEncouragement: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 212, 170, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 170, 0.2)',
+    gap: 8,
+  },
+  monthlyEncouragementText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#00D4AA',
+    flex: 1,
+    lineHeight: 18,
   },
 
   // Portfolio Entries Styles
