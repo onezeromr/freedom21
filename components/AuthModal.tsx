@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { X, Mail, Lock, User, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
+import { X, Mail, Lock, User, Eye, EyeOff, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 
 interface AuthModalProps {
