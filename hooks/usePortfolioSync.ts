@@ -37,6 +37,78 @@ export interface PortfolioEntry {
   created_at: string;
 }
 
+// Check if localStorage is available (not in incognito mode)
+const isLocalStorageAvailable = (): boolean => {
+  try {
+    const test = '__localStorage_test__';
+    localStorage.setItem(test, test);
+    localStorage.removeItem(test);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// Safe localStorage wrapper
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    if (!isLocalStorageAvailable()) return null;
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    if (!isLocalStorageAvailable()) return;
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Silently fail in incognito mode
+    }
+  },
+  removeItem: (key: string): void => {
+    if (!isLocalStorageAvailable()) return;
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Silently fail in incognito mode
+    }
+  }
+};
+
+// Default portfolio state for when no data is available
+const getDefaultPortfolioState = (): PortfolioState => {
+  const currentYear = new Date().getFullYear();
+  const years = 20;
+  
+  return {
+    startingAmount: 0,
+    monthlyAmount: 500,
+    years,
+    currentAge: null,
+    btcHurdleRate: 30,
+    selectedAsset: 'BTC',
+    customCAGR: 30,
+    pauseAfterYears: null,
+    boostAfterYears: null,
+    boostAmount: 1000,
+    useRealisticCAGR: false,
+    useDecliningRates: false,
+    phase1Rate: 30,
+    phase2Rate: 20,
+    phase3Rate: 15,
+    inflationRate: 3,
+    useInflationAdjustment: false,
+    futureValue: 0,
+    btcHurdleValue: 0,
+    outperformance: 0,
+    targetYear: currentYear + years,
+    futureAge: null,
+    lastUpdated: new Date().toISOString(),
+  };
+};
+
 export function usePortfolioSync() {
   const { user } = useAuth();
   const [portfolioState, setPortfolioState] = useState<PortfolioState | null>(null);
@@ -122,8 +194,8 @@ export function usePortfolioSync() {
           
           setPortfolioState(completeState);
           
-          // Also save to localStorage for offline access
-          localStorage.setItem('freedom21_calculator_state', JSON.stringify(completeState));
+          // Also save to localStorage for offline access (if available)
+          safeLocalStorage.setItem('freedom21_calculator_state', JSON.stringify(completeState));
           
           // Update last synced state reference
           lastSyncedStateRef.current = createStateHash(completeState);
@@ -132,21 +204,46 @@ export function usePortfolioSync() {
         }
       }
 
-      // Fallback to localStorage
-      const savedState = localStorage.getItem('freedom21_calculator_state');
+      // Fallback to localStorage (if available)
+      const savedState = safeLocalStorage.getItem('freedom21_calculator_state');
       if (savedState) {
-        const localState = JSON.parse(savedState);
-        
-        // Ensure calculated values are present
-        const calculatedValues = calculatePortfolioValues(localState);
-        const completeState = { ...localState, ...calculatedValues };
-        
-        setPortfolioState(completeState);
-        lastSyncedStateRef.current = createStateHash(completeState);
-        isInitialLoadRef.current = false;
+        try {
+          const localState = JSON.parse(savedState);
+          
+          // Ensure calculated values are present
+          const calculatedValues = calculatePortfolioValues(localState);
+          const completeState = { ...localState, ...calculatedValues };
+          
+          setPortfolioState(completeState);
+          lastSyncedStateRef.current = createStateHash(completeState);
+          isInitialLoadRef.current = false;
+          return;
+        } catch (parseError) {
+          console.error('Error parsing saved state:', parseError);
+        }
       }
+
+      // Final fallback: use default state
+      console.log('Using default portfolio state (incognito mode or no saved data)');
+      const defaultState = getDefaultPortfolioState();
+      const calculatedValues = calculatePortfolioValues(defaultState);
+      const completeState = { ...defaultState, ...calculatedValues };
+      
+      setPortfolioState(completeState);
+      lastSyncedStateRef.current = createStateHash(completeState);
+      isInitialLoadRef.current = false;
+      
     } catch (error) {
       console.error('Error loading portfolio state:', error);
+      
+      // Emergency fallback
+      const defaultState = getDefaultPortfolioState();
+      const calculatedValues = calculatePortfolioValues(defaultState);
+      const completeState = { ...defaultState, ...calculatedValues };
+      
+      setPortfolioState(completeState);
+      lastSyncedStateRef.current = createStateHash(completeState);
+      isInitialLoadRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -165,12 +262,18 @@ export function usePortfolioSync() {
         return; // No meaningful changes, don't sync
       }
       
-      // Save to localStorage immediately
-      localStorage.setItem('freedom21_calculator_state', JSON.stringify(updatedState));
+      // Save to localStorage immediately (if available)
+      safeLocalStorage.setItem('freedom21_calculator_state', JSON.stringify(updatedState));
       setPortfolioState(updatedState);
       
-      // Dispatch event for cross-tab sync
-      window.dispatchEvent(new CustomEvent('calculatorStateUpdate', { detail: updatedState }));
+      // Dispatch event for cross-tab sync (if localStorage is available)
+      if (isLocalStorageAvailable()) {
+        try {
+          window.dispatchEvent(new CustomEvent('calculatorStateUpdate', { detail: updatedState }));
+        } catch {
+          // Silently fail if events are not supported
+        }
+      }
 
       // Only sync to cloud if user is authenticated and state actually changed
       if (user && newStateHash !== lastSyncedStateRef.current) {
@@ -497,13 +600,19 @@ export function usePortfolioSync() {
     loadPortfolioEntries();
   }, [user, loadPortfolioEntries]);
 
-  // Listen for storage events (cross-tab sync)
+  // Listen for storage events (cross-tab sync) - only if localStorage is available
   useEffect(() => {
+    if (!isLocalStorageAvailable()) return;
+
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'freedom21_calculator_state' && e.newValue) {
-        const newState = JSON.parse(e.newValue);
-        setPortfolioState(newState);
-        lastSyncedStateRef.current = createStateHash(newState);
+        try {
+          const newState = JSON.parse(e.newValue);
+          setPortfolioState(newState);
+          lastSyncedStateRef.current = createStateHash(newState);
+        } catch {
+          // Ignore invalid JSON
+        }
       }
     };
 

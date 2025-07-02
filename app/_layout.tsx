@@ -24,7 +24,7 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  // Ensure app loads properly even if fonts fail
+  // Ensure app loads properly even if fonts fail or in incognito mode
   useEffect(() => {
     const timer = setTimeout(() => {
       SplashScreen.hideAsync();
@@ -33,10 +33,8 @@ export default function RootLayout() {
     return () => clearTimeout(timer);
   }, []);
 
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
-
+  // Always render the app structure, even if fonts aren't loaded
+  // This prevents the infinite loading in incognito mode
   return (
     <>
       <Stack screenOptions={{ headerShown: false }}>
