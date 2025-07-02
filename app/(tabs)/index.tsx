@@ -92,8 +92,8 @@ export default function CalculatorScreen() {
   const [inflationRate, setInflationRate] = useState(3);
   const [useInflationAdjustment, setUseInflationAdjustment] = useState(false);
 
-  // Track if user has manually modified CAGR
-  const [hasManualCAGR, setHasManualCAGR] = useState(false);
+  // Track CAGR source: 'suggested' | 'live' | 'manual'
+  const [cagrSource, setCAGRSource] = useState<'suggested' | 'live' | 'manual'>('suggested');
 
   const isMobile = width < 768;
 
@@ -176,22 +176,20 @@ export default function CalculatorScreen() {
     if (asset) {
       // Always use the suggested value when changing assets
       setCustomCAGR(asset.defaultCAGR);
-      setHasManualCAGR(false); // Reset manual flag when changing assets
+      setCAGRSource('suggested'); // Reset to suggested when changing assets
     }
   };
 
-  const handleCAGRUpdate = (newCAGR: number) => {
-    // Only update from live data if user hasn't manually modified CAGR
-    // and the current CAGR matches the asset's suggested value
-    const currentAsset = ASSET_OPTIONS.find(a => a.name === selectedAsset);
-    if (!hasManualCAGR && currentAsset && customCAGR === currentAsset.defaultCAGR) {
-      setCustomCAGR(newCAGR);
-    }
+  // Handle CAGR updates from Live Historical data
+  const handleLiveCAGRUpdate = (newCAGR: number) => {
+    setCustomCAGR(newCAGR);
+    setCAGRSource('live'); // Mark as coming from live data
   };
 
+  // Handle manual CAGR changes via slider
   const handleManualCAGRChange = (newCAGR: number) => {
     setCustomCAGR(newCAGR);
-    setHasManualCAGR(true); // Mark as manually modified
+    setCAGRSource('manual'); // Mark as manually modified
   };
 
   const saveScenario = () => {
@@ -271,6 +269,19 @@ export default function CalculatorScreen() {
     }
     
     return `${rate.toFixed(1)}%`;
+  };
+
+  const getCAGRSourceText = () => {
+    switch (cagrSource) {
+      case 'suggested':
+        return 'Using suggested value';
+      case 'live':
+        return 'Using live historical data';
+      case 'manual':
+        return 'Manually adjusted';
+      default:
+        return '';
+    }
   };
 
   const AssetCard = ({ asset, isSelected, onPress }: any) => (
@@ -490,7 +501,7 @@ export default function CalculatorScreen() {
             <AnimatedCard delay={600}>
               <LiveCAGRDisplay
                 assetName={selectedAsset}
-                onCAGRUpdate={handleCAGRUpdate}
+                onCAGRUpdate={handleLiveCAGRUpdate}
                 defaultCAGR={customCAGR}
               />
             </AnimatedCard>
@@ -515,11 +526,9 @@ export default function CalculatorScreen() {
               <Text style={styles.cagrNote}>
                 💡 Current setting: {getEffectiveCAGR()} effective growth rate
               </Text>
-              {hasManualCAGR && (
-                <Text style={styles.manualCAGRNote}>
-                  ✏️ You've manually adjusted this value. It won't sync with live data.
-                </Text>
-              )}
+              <Text style={styles.cagrSourceNote}>
+                📊 {getCAGRSourceText()}
+              </Text>
             </GlassCard>
           </AnimatedCard>
 
@@ -987,13 +996,13 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 8,
   },
-  manualCAGRNote: {
+  cagrSourceNote: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#F59E0B',
+    color: '#8B5CF6',
     textAlign: 'center',
     marginTop: 8,
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    backgroundColor: 'rgba(139, 92, 246, 0.1)',
     padding: 8,
     borderRadius: 8,
   },
