@@ -174,7 +174,7 @@ async function getSupabaseCachedData(symbol: string): Promise<CAGRData | null> {
       .from('market_data_cache')
       .select('*')
       .eq('symbol', symbol)
-      .single();
+      .maybeSingle();
 
     if (error || !data) {
       return null;
