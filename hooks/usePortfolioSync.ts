@@ -341,17 +341,22 @@ export function usePortfolioSync() {
     }
   }, [user, loadPortfolioEntries]);
 
-  // Delete portfolio entry
+  // Delete portfolio entry - Fixed implementation
   const deletePortfolioEntry = useCallback(async (id: string) => {
-    if (!user) return;
+    if (!user) {
+      console.log('No user authenticated');
+      return false;
+    }
 
     // Don't allow deletion of sample entries
     if (id.startsWith('sample-')) {
-      alert('Cannot delete sample entries. Sign in to manage your own entries.');
-      return;
+      console.log('Cannot delete sample entries');
+      return false;
     }
 
     try {
+      console.log(`Attempting to delete portfolio entry: ${id} for user: ${user.id}`);
+      
       const { error } = await supabase
         .from('portfolio_entries')
         .delete()
@@ -360,13 +365,17 @@ export function usePortfolioSync() {
 
       if (error) {
         console.error('Error deleting portfolio entry:', error);
-        return;
+        throw error;
       }
 
-      // Reload entries
+      console.log('Portfolio entry deleted successfully');
+      
+      // Reload entries to reflect the change
       await loadPortfolioEntries();
+      return true;
     } catch (error) {
       console.error('Error deleting portfolio entry:', error);
+      throw error;
     }
   }, [user, loadPortfolioEntries]);
 

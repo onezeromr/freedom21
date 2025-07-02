@@ -221,9 +221,15 @@ export default function TableScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deletePortfolioEntry(id);
-              Alert.alert('Success', 'Portfolio entry deleted successfully!');
+              console.log('Attempting to delete entry:', id);
+              const success = await deletePortfolioEntry(id);
+              if (success) {
+                Alert.alert('Success', 'Portfolio entry deleted successfully!');
+              } else {
+                Alert.alert('Error', 'Failed to delete portfolio entry. Please try again.');
+              }
             } catch (error) {
+              console.error('Delete error:', error);
               Alert.alert('Error', 'Failed to delete portfolio entry. Please try again.');
             }
           },

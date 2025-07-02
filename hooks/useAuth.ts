@@ -142,6 +142,7 @@ export function useAuth() {
   };
 
   const signOut = async () => {
+    console.log('Starting sign out process...');
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
@@ -166,6 +167,13 @@ export function useAuth() {
       try {
         localStorage.removeItem('supabase.auth.token');
         localStorage.removeItem('sb-' + supabase.supabaseUrl.split('//')[1] + '-auth-token');
+        
+        // Clear all Supabase auth related items
+        Object.keys(localStorage).forEach(key => {
+          if (key.includes('supabase') || key.includes('sb-')) {
+            localStorage.removeItem(key);
+          }
+        });
       } catch (storageError) {
         console.log('Storage clear error (non-critical):', storageError);
       }
