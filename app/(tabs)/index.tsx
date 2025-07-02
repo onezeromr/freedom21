@@ -92,6 +92,9 @@ export default function CalculatorScreen() {
   const [inflationRate, setInflationRate] = useState(3);
   const [useInflationAdjustment, setUseInflationAdjustment] = useState(false);
 
+  // Track if user has manually modified CAGR
+  const [hasManualCAGR, setHasManualCAGR] = useState(false);
+
   const isMobile = width < 768;
 
   // Load portfolio state when it changes
@@ -171,16 +174,24 @@ export default function CalculatorScreen() {
     setSelectedAsset(assetName);
     const asset = ASSET_OPTIONS.find(a => a.name === assetName);
     if (asset) {
+      // Always use the suggested value when changing assets
       setCustomCAGR(asset.defaultCAGR);
+      setHasManualCAGR(false); // Reset manual flag when changing assets
     }
   };
 
   const handleCAGRUpdate = (newCAGR: number) => {
-    // Only update CAGR if user hasn't manually changed it from the default
+    // Only update from live data if user hasn't manually modified CAGR
+    // and the current CAGR matches the asset's suggested value
     const currentAsset = ASSET_OPTIONS.find(a => a.name === selectedAsset);
-    if (currentAsset && customCAGR === currentAsset.defaultCAGR) {
+    if (!hasManualCAGR && currentAsset && customCAGR === currentAsset.defaultCAGR) {
       setCustomCAGR(newCAGR);
     }
+  };
+
+  const handleManualCAGRChange = (newCAGR: number) => {
+    setCustomCAGR(newCAGR);
+    setHasManualCAGR(true); // Mark as manually modified
   };
 
   const saveScenario = () => {
@@ -497,13 +508,18 @@ export default function CalculatorScreen() {
                 minimumValue={1}
                 maximumValue={50}
                 step={0.5}
-                onValueChange={setCustomCAGR}
+                onValueChange={handleManualCAGRChange}
                 formatValue={(val) => `${val}%`}
                 color="#00D4AA"
               />
               <Text style={styles.cagrNote}>
                 💡 Current setting: {getEffectiveCAGR()} effective growth rate
               </Text>
+              {hasManualCAGR && (
+                <Text style={styles.manualCAGRNote}>
+                  ✏️ You've manually adjusted this value. It won't sync with live data.
+                </Text>
+              )}
             </GlassCard>
           </AnimatedCard>
 
@@ -968,6 +984,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     backgroundColor: 'rgba(0, 212, 170, 0.1)',
+    padding: 8,
+    borderRadius: 8,
+  },
+  manualCAGRNote: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#F59E0B',
+    textAlign: 'center',
+    marginTop: 8,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
     padding: 8,
     borderRadius: 8,
   },
