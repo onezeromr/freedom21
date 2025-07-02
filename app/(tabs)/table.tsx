@@ -7,10 +7,11 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Modal,
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Table, Calendar, DollarSign, TrendingUp, Plus, Trash2, User, LogIn } from 'lucide-react-native';
+import { Table, Calendar, DollarSign, TrendingUp, Plus, Trash2, User, LogIn, Edit3, X, Check } from 'lucide-react-native';
 import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 import { usePortfolioSync } from '@/hooks/usePortfolioSync';
@@ -34,11 +35,15 @@ export default function TableScreen() {
     portfolioState, 
     portfolioEntries, 
     savePortfolioEntry, 
-    deletePortfolioEntry 
+    deletePortfolioEntry,
+    updatePortfolioEntry 
   } = usePortfolioSync();
   
   const [yearlyData, setYearlyData] = useState<YearlyData[]>([]);
   const [currentPortfolioValue, setCurrentPortfolioValue] = useState('');
+  const [editingEntry, setEditingEntry] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const isMobile = screenWidth < 768;
 
@@ -200,6 +205,12 @@ export default function TableScreen() {
   };
 
   const handleDeleteEntry = async (id: string) => {
+    // Check if it's a sample entry
+    if (id.startsWith('sample-')) {
+      Alert.alert('Cannot Delete', 'Sample entries cannot be deleted. Sign in to manage your own portfolio entries.');
+      return;
+    }
+
     Alert.alert(
       'Delete Entry',
       'Are you sure you want to delete this portfolio entry?',
@@ -212,6 +223,46 @@ export default function TableScreen() {
         },
       ]
     );
+  };
+
+  const handleEditEntry = (id: string, currentAmount: number) => {
+    // Check if it's a sample entry
+    if (id.startsWith('sample-')) {
+      Alert.alert('Cannot Edit', 'Sample entries cannot be edited. Sign in to manage your own portfolio entries.');
+      return;
+    }
+
+    setEditingEntry(id);
+    setEditValue(currentAmount.toString());
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingEntry || !editValue.trim()) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+
+    const amount = parseFloat(editValue.replace(/[^0-9.]/g, ''));
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Error', 'Please enter a valid portfolio value');
+      return;
+    }
+
+    // Get current year target from yearly data
+    const currentYear = new Date().getFullYear();
+    const currentYearData = yearlyData.find(d => d.year === currentYear);
+    const target = currentYearData ? currentYearData.assetValue : 0;
+
+    const result = await updatePortfolioEntry(editingEntry, amount, target);
+    if (result) {
+      setShowEditModal(false);
+      setEditingEntry(null);
+      setEditValue('');
+      Alert.alert('Success', 'Portfolio entry updated successfully!');
+    } else {
+      Alert.alert('Error', 'Failed to update portfolio entry. Please try again.');
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -382,48 +433,66 @@ export default function TableScreen() {
               </View>
 
               {/* Portfolio Entries Table */}
-              {user ? (
-                portfolioEntries.length > 0 ? (
-                  <View style={styles.entriesTable}>
-                    <View style={styles.tableHeader}>
-                      <Text style={styles.tableHeaderCell}>Date</Text>
-                      <Text style={styles.tableHeaderCell}>Portfolio Amount</Text>
-                      <Text style={styles.tableHeaderCell}>Variance vs Target</Text>
-                      <Text style={styles.tableHeaderCell}>Action</Text>
-                    </View>
-                    
-                    {portfolioEntries.map((entry) => (
-                      <View key={entry.id} style={styles.tableRow}>
-                        <Text style={styles.tableCell}>{formatDate(entry.created_at)}</Text>
-                        <Text style={styles.tableCellAmount}>{formatCurrency(entry.amount)}</Text>
-                        <View style={styles.varianceCell}>
-                          <Text style={[
-                            styles.varianceText,
-                            { color: entry.variance >= 0 ? '#00D4AA' : '#EF4444' }
-                          ]}>
-                            {entry.variance >= 0 ? '+' : ''}{formatCurrency(entry.variance)}
-                          </Text>
-                          <Text style={styles.variancePercentage}>
-                            ({entry.variance_percentage >= 0 ? '+' : ''}{entry.variance_percentage.toFixed(1)}%)
-                          </Text>
-                        </View>
+              {portfolioEntries.length > 0 ? (
+                <View style={styles.entriesTable}>
+                  <View style={styles.tableHeader}>
+                    <Text style={styles.tableHeaderCell}>Date</Text>
+                    <Text style={styles.tableHeaderCell}>Portfolio Amount</Text>
+                    <Text style={styles.tableHeaderCell}>Variance vs Target</Text>
+                    <Text style={styles.tableHeaderCell}>Actions</Text>
+                  </View>
+                  
+                  {portfolioEntries.map((entry) => (
+                    <View key={entry.id} style={styles.tableRow}>
+                      <Text style={styles.tableCell}>{formatDate(entry.created_at)}</Text>
+                      <Text style={styles.tableCellAmount}>{formatCurrency(entry.amount)}</Text>
+                      <View style={styles.varianceCell}>
+                        <Text style={[
+                          styles.varianceText,
+                          { color: entry.variance >= 0 ? '#00D4AA' : '#EF4444' }
+                        ]}>
+                          {entry.variance >= 0 ? '+' : ''}{formatCurrency(entry.variance)}
+                        </Text>
+                        <Text style={styles.variancePercentage}>
+                          ({entry.variance_percentage >= 0 ? '+' : ''}{entry.variance_percentage.toFixed(1)}%)
+                        </Text>
+                      </View>
+                      <View style={styles.actionsCell}>
                         <TouchableOpacity
-                          style={styles.deleteButton}
+                          style={styles.actionButton}
+                          onPress={() => handleEditEntry(entry.id, entry.amount)}
+                          activeOpacity={0.7}
+                        >
+                          <Edit3 size={16} color="#00D4AA" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.actionButton}
                           onPress={() => handleDeleteEntry(entry.id)}
                           activeOpacity={0.7}
                         >
                           <Trash2 size={16} color="#EF4444" />
                         </TouchableOpacity>
                       </View>
-                    ))}
-                  </View>
-                ) : (
-                  <View style={styles.noEntriesState}>
-                    <Text style={styles.noEntriesText}>No portfolio entries yet</Text>
-                    <Text style={styles.noEntriesSubtext}>Add your first entry above to start tracking</Text>
-                  </View>
-                )
+                    </View>
+                  ))}
+
+                  {/* Sample entries indicator */}
+                  {!user && portfolioEntries.some(entry => entry.id.startsWith('sample-')) && (
+                    <View style={styles.sampleIndicator}>
+                      <Text style={styles.sampleIndicatorText}>
+                        📝 These are sample entries. Sign in to track your real portfolio!
+                      </Text>
+                    </View>
+                  )}
+                </View>
               ) : (
+                <View style={styles.noEntriesState}>
+                  <Text style={styles.noEntriesText}>No portfolio entries yet</Text>
+                  <Text style={styles.noEntriesSubtext}>Add your first entry above to start tracking</Text>
+                </View>
+              )}
+
+              {!user && (
                 <View style={styles.signInPrompt}>
                   <User size={24} color="#F59E0B" />
                   <Text style={styles.signInText}>Sign in to save your portfolio entries to the cloud and sync across devices</Text>
@@ -565,6 +634,68 @@ export default function TableScreen() {
             </View>
           </AnimatedCard>
         </ScrollView>
+
+        {/* Edit Modal */}
+        <Modal
+          visible={showEditModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          transparent={true}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Portfolio Entry</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowEditModal(false);
+                    setEditingEntry(null);
+                    setEditValue('');
+                  }}
+                  style={styles.modalClose}
+                >
+                  <X size={24} color="#94A3B8" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.modalContent}>
+                <Text style={styles.modalLabel}>Portfolio Amount</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={editValue}
+                  onChangeText={setEditValue}
+                  placeholder="Enter portfolio value"
+                  placeholderTextColor="#64748B"
+                  keyboardType="numeric"
+                  autoFocus
+                />
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={styles.modalCancelButton}
+                    onPress={() => {
+                      setShowEditModal(false);
+                      setEditingEntry(null);
+                      setEditValue('');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.modalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.modalSaveButton}
+                    onPress={handleSaveEdit}
+                    activeOpacity={0.8}
+                  >
+                    <Check size={20} color="#FFFFFF" />
+                    <Text style={styles.modalSaveText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </LinearGradient>
     </View>
   );
@@ -728,6 +859,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 12,
     overflow: 'hidden',
+    marginBottom: 16,
   },
   tableHeader: {
     flexDirection: 'row',
@@ -778,10 +910,28 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#94A3B8',
   },
-  deleteButton: {
+  actionsCell: {
     flex: 1,
-    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  actionButton: {
     padding: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  sampleIndicator: {
+    backgroundColor: 'rgba(0, 212, 170, 0.1)',
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  sampleIndicatorText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#00D4AA',
+    textAlign: 'center',
   },
   noEntriesState: {
     alignItems: 'center',
@@ -805,6 +955,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     gap: 12,
+    marginTop: 16,
   },
   signInText: {
     flex: 1,
@@ -1076,5 +1227,83 @@ const styles = StyleSheet.create({
   negativeText: {
     fontFamily: 'Inter-SemiBold',
     color: '#EF4444',
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalContainer: {
+    backgroundColor: '#0F172A',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 400,
+    padding: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  modalClose: {
+    padding: 8,
+  },
+  modalContent: {
+    gap: 20,
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  modalInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#94A3B8',
+  },
+  modalSaveButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    backgroundColor: '#00D4AA',
+    borderRadius: 12,
+    gap: 8,
+  },
+  modalSaveText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
 });

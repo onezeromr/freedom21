@@ -303,6 +303,44 @@ export function usePortfolioSync() {
     }
   }, [user, loadPortfolioEntries]);
 
+  // Update portfolio entry
+  const updatePortfolioEntry = useCallback(async (id: string, amount: number, target: number) => {
+    if (!user) {
+      alert('Please sign in to update portfolio entries');
+      return null;
+    }
+
+    try {
+      const variance = amount - target;
+      const variance_percentage = target > 0 ? (variance / target) * 100 : 0;
+
+      const { data, error } = await supabase
+        .from('portfolio_entries')
+        .update({
+          amount,
+          variance,
+          variance_percentage,
+          target,
+        })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating portfolio entry:', error);
+        return null;
+      }
+
+      // Reload entries
+      await loadPortfolioEntries();
+      return data;
+    } catch (error) {
+      console.error('Error updating portfolio entry:', error);
+      return null;
+    }
+  }, [user, loadPortfolioEntries]);
+
   // Delete portfolio entry
   const deletePortfolioEntry = useCallback(async (id: string) => {
     if (!user) return;
@@ -515,6 +553,7 @@ export function usePortfolioSync() {
     syncing,
     updatePortfolioState,
     savePortfolioEntry,
+    updatePortfolioEntry,
     deletePortfolioEntry,
     loadPortfolioState,
     loadPortfolioEntries,
