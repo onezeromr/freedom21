@@ -166,7 +166,11 @@ export default function CalculatorScreen() {
   };
 
   const handleCAGRUpdate = (newCAGR: number) => {
-    setCustomCAGR(newCAGR);
+    // Only update CAGR if it's different from the current value
+    // This prevents overriding user's manual adjustments
+    if (newCAGR !== customCAGR) {
+      setCustomCAGR(newCAGR);
+    }
   };
 
   const saveScenario = () => {
@@ -430,7 +434,7 @@ export default function CalculatorScreen() {
             </GlassCard>
           </AnimatedCard>
 
-          {/* Asset Selection - Updated to remove TSLA and NVDA */}
+          {/* Asset Selection */}
           <AnimatedCard delay={500}>
             <GlassCard style={styles.section}>
               <View style={styles.sectionHeader}>
