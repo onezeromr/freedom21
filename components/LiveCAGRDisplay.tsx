@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { ChevronDown, TrendingUp, RefreshCw, Wifi, WifiOff, Clock, TriangleAlert as AlertTriangle } from 'lucide-react-native';
-import { getAssetCAGR, CAGRResult } from '../services/alphaVantage';
+import { getAssetCAGR, CAGRResult, forceRefreshAsset } from '../services/twelveData';
 import GlassCard from './GlassCard';
 
 interface LiveCAGRDisplayProps {
@@ -43,8 +43,30 @@ export default function LiveCAGRDisplay({
         onCAGRUpdate(suggestedCAGR);
       }
     } catch (err) {
-      // This should not happen anymore since getAssetCAGR always returns a result
       console.error('Unexpected error in loadCAGRData:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForceRefresh = async () => {
+    setLoading(true);
+    
+    try {
+      const result = await forceRefreshAsset(assetName);
+      setCAGRResult(result);
+      setLastRefresh(new Date());
+      
+      // Update parent with suggested CAGR
+      const suggestedCAGR = result.data.cagr10Y !== 'N/A' ? result.data.cagr10Y : 
+                           result.data.cagr5Y !== 'N/A' ? result.data.cagr5Y : 
+                           result.data.cagr1Y !== 'N/A' ? result.data.cagr1Y : defaultCAGR;
+      
+      if (onCAGRUpdate && typeof suggestedCAGR === 'number') {
+        onCAGRUpdate(suggestedCAGR);
+      }
+    } catch (err) {
+      console.error('Error force refreshing data:', err);
     } finally {
       setLoading(false);
     }
@@ -80,7 +102,7 @@ export default function LiveCAGRDisplay({
   };
 
   const isDataFresh = cagrResult && !cagrResult.isFallback && lastRefresh && 
-    (new Date().getTime() - new Date(cagrResult.data.lastUpdate).getTime()) < (2 * 60 * 60 * 1000); // 2 hours
+    (new Date().getTime() - new Date(cagrResult.data.lastUpdate).getTime()) < (5 * 60 * 60 * 1000); // 5 hours
 
   const getStatusIcon = () => {
     if (loading) {
@@ -128,7 +150,7 @@ export default function LiveCAGRDisplay({
           <TouchableOpacity 
             onPress={(e) => {
               e.stopPropagation();
-              loadCAGRData();
+              handleForceRefresh();
             }}
             style={styles.refreshButton}
             disabled={loading}
@@ -216,7 +238,7 @@ export default function LiveCAGRDisplay({
               
               <View style={styles.disclaimer}>
                 <Text style={styles.disclaimerText}>
-                  📈 {cagrResult.isFallback ? 'Fallback data' : 'Data from Alpha Vantage'} • Updated: {formatLastUpdate(cagrResult.data.lastUpdate)}
+                  📈 {cagrResult.isFallback ? 'Fallback data' : 'Data from Twelve Data'} • Updated: {formatLastUpdate(cagrResult.data.lastUpdate)}
                 </Text>
                 <Text style={styles.disclaimerSubtext}>
                   Past performance doesn't guarantee future results
