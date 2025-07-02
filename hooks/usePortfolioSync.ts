@@ -224,7 +224,29 @@ export function usePortfolioSync() {
 
   // Load portfolio entries
   const loadPortfolioEntries = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      // Add sample entries for non-authenticated users
+      const sampleEntries: PortfolioEntry[] = [
+        {
+          id: 'sample-1',
+          amount: 6500,
+          variance: 500,
+          variance_percentage: 8.33,
+          target: 6000,
+          created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days ago
+        },
+        {
+          id: 'sample-2',
+          amount: 12800,
+          variance: 800,
+          variance_percentage: 6.67,
+          target: 12000,
+          created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
+        }
+      ];
+      setPortfolioEntries(sampleEntries);
+      return;
+    }
 
     try {
       const { data, error } = await supabase
@@ -246,7 +268,10 @@ export function usePortfolioSync() {
 
   // Save portfolio entry
   const savePortfolioEntry = useCallback(async (amount: number, target: number) => {
-    if (!user) return;
+    if (!user) {
+      alert('Please sign in to save portfolio entries');
+      return null;
+    }
 
     try {
       const variance = amount - target;
@@ -281,6 +306,12 @@ export function usePortfolioSync() {
   // Delete portfolio entry
   const deletePortfolioEntry = useCallback(async (id: string) => {
     if (!user) return;
+
+    // Don't allow deletion of sample entries
+    if (id.startsWith('sample-')) {
+      alert('Cannot delete sample entries. Sign in to manage your own entries.');
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -416,11 +447,7 @@ export function usePortfolioSync() {
 
   // Load portfolio entries when user changes
   useEffect(() => {
-    if (user) {
-      loadPortfolioEntries();
-    } else {
-      setPortfolioEntries([]);
-    }
+    loadPortfolioEntries();
   }, [user, loadPortfolioEntries]);
 
   // Listen for storage events (cross-tab sync)

@@ -140,7 +140,7 @@ export default function LiveCAGRDisplay({
             {getStatusIcon()}
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>📊 Live Growth Data</Text>
+            <Text style={styles.headerTitle}>📊 Live Historical CAGR</Text>
             <Text style={styles.headerSubtitle}>
               {getStatusText()}
             </Text>

@@ -24,6 +24,15 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  // Ensure app loads properly even if fonts fail
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      SplashScreen.hideAsync();
+    }, 3000); // Fallback timeout after 3 seconds
+
+    return () => clearTimeout(timer);
+  }, []);
+
   if (!fontsLoaded && !fontError) {
     return null;
   }
