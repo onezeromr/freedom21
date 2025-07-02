@@ -34,14 +34,7 @@ export default function LiveCAGRDisplay({
       setCAGRResult(result);
       setLastRefresh(new Date());
       
-      // Update parent with suggested CAGR (prioritize 10Y > 5Y > 1Y)
-      const suggestedCAGR = result.data.cagr10Y !== 'N/A' ? result.data.cagr10Y : 
-                           result.data.cagr5Y !== 'N/A' ? result.data.cagr5Y : 
-                           result.data.cagr1Y !== 'N/A' ? result.data.cagr1Y : defaultCAGR;
-      
-      if (onCAGRUpdate && typeof suggestedCAGR === 'number') {
-        onCAGRUpdate(suggestedCAGR);
-      }
+      // DO NOT automatically update parent CAGR - only when user clicks
     } catch (err) {
       console.error('Unexpected error in loadCAGRData:', err);
     } finally {
@@ -57,18 +50,22 @@ export default function LiveCAGRDisplay({
       setCAGRResult(result);
       setLastRefresh(new Date());
       
-      // Update parent with suggested CAGR
-      const suggestedCAGR = result.data.cagr10Y !== 'N/A' ? result.data.cagr10Y : 
-                           result.data.cagr5Y !== 'N/A' ? result.data.cagr5Y : 
-                           result.data.cagr1Y !== 'N/A' ? result.data.cagr1Y : defaultCAGR;
-      
-      if (onCAGRUpdate && typeof suggestedCAGR === 'number') {
-        onCAGRUpdate(suggestedCAGR);
-      }
+      // DO NOT automatically update parent CAGR - only when user clicks
     } catch (err) {
       console.error('Error force refreshing data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle user clicking on a specific CAGR value
+  const handleCAGRClick = (cagrValue: number | 'N/A', period: string) => {
+    if (cagrValue === 'N/A' || typeof cagrValue !== 'number') {
+      return;
+    }
+
+    if (onCAGRUpdate) {
+      onCAGRUpdate(cagrValue);
     }
   };
 
@@ -186,7 +183,15 @@ export default function LiveCAGRDisplay({
               )}
               
               <View style={styles.cagrGrid}>
-                <View style={styles.cagrItem}>
+                <TouchableOpacity
+                  style={[
+                    styles.cagrItem,
+                    cagrResult.data.cagr1Y === 'N/A' && styles.cagrItemDisabled
+                  ]}
+                  onPress={() => handleCAGRClick(cagrResult.data.cagr1Y, '1 Year')}
+                  disabled={cagrResult.data.cagr1Y === 'N/A'}
+                  activeOpacity={0.7}
+                >
                   <Text style={styles.cagrLabel}>1 Year CAGR</Text>
                   <Text style={[
                     styles.cagrValue,
@@ -194,8 +199,20 @@ export default function LiveCAGRDisplay({
                   ]}>
                     {formatCAGR(cagrResult.data.cagr1Y)}
                   </Text>
-                </View>
-                <View style={styles.cagrItem}>
+                  {cagrResult.data.cagr1Y !== 'N/A' && (
+                    <Text style={styles.clickHint}>Tap to use</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.cagrItem,
+                    cagrResult.data.cagr5Y === 'N/A' && styles.cagrItemDisabled
+                  ]}
+                  onPress={() => handleCAGRClick(cagrResult.data.cagr5Y, '5 Year')}
+                  disabled={cagrResult.data.cagr5Y === 'N/A'}
+                  activeOpacity={0.7}
+                >
                   <Text style={styles.cagrLabel}>5 Year CAGR</Text>
                   <Text style={[
                     styles.cagrValue,
@@ -203,8 +220,20 @@ export default function LiveCAGRDisplay({
                   ]}>
                     {formatCAGR(cagrResult.data.cagr5Y)}
                   </Text>
-                </View>
-                <View style={styles.cagrItem}>
+                  {cagrResult.data.cagr5Y !== 'N/A' && (
+                    <Text style={styles.clickHint}>Tap to use</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.cagrItem,
+                    cagrResult.data.cagr10Y === 'N/A' && styles.cagrItemDisabled
+                  ]}
+                  onPress={() => handleCAGRClick(cagrResult.data.cagr10Y, '10 Year')}
+                  disabled={cagrResult.data.cagr10Y === 'N/A'}
+                  activeOpacity={0.7}
+                >
                   <Text style={styles.cagrLabel}>10 Year CAGR</Text>
                   <Text style={[
                     styles.cagrValue,
@@ -212,13 +241,16 @@ export default function LiveCAGRDisplay({
                   ]}>
                     {formatCAGR(cagrResult.data.cagr10Y)}
                   </Text>
-                </View>
+                  {cagrResult.data.cagr10Y !== 'N/A' && (
+                    <Text style={styles.clickHint}>Tap to use</Text>
+                  )}
+                </TouchableOpacity>
               </View>
               
               <View style={styles.suggestion}>
                 <TrendingUp size={16} color="#00D4AA" />
                 <Text style={styles.suggestionText}>
-                  💡 We suggest using {defaultCAGR}% as a conservative estimate for long-term planning
+                  💡 Click any CAGR value above to use it in your calculations
                 </Text>
               </View>
               
@@ -354,6 +386,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
+  cagrItemDisabled: {
+    opacity: 0.5,
+  },
   cagrLabel: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
@@ -366,10 +401,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     color: '#00D4AA',
     textAlign: 'center',
+    marginBottom: 4,
   },
   cagrValueNA: {
     color: '#64748B',
     fontSize: 14,
+  },
+  clickHint: {
+    fontSize: 10,
+    fontFamily: 'Inter-Medium',
+    color: '#00D4AA',
+    textAlign: 'center',
+    opacity: 0.7,
   },
   suggestion: {
     flexDirection: 'row',
