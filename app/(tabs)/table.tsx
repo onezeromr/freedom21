@@ -11,7 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Table, Calendar, DollarSign, TrendingUp, Plus, Trash2, User, LogIn, Edit3, X, Check } from 'lucide-react-native';
+import { Table, Calendar, DollarSign, TrendingUp, Plus, Trash2, User, LogIn, CreditCard as Edit3, X, Check } from 'lucide-react-native';
 import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 import { usePortfolioSync } from '@/hooks/usePortfolioSync';
