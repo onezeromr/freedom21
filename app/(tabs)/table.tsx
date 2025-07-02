@@ -11,7 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Table, Calendar, DollarSign, TrendingUp, Plus, Trash2, User, LogIn, CreditCard as Edit3, X, Check } from 'lucide-react-native';
+import { Table, Calendar, DollarSign, TrendingUp, Plus, Trash2, User, LogIn, Edit3, X, Check } from 'lucide-react-native';
 import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 import { usePortfolioSync } from '@/hooks/usePortfolioSync';
@@ -219,7 +219,14 @@ export default function TableScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => deletePortfolioEntry(id),
+          onPress: async () => {
+            try {
+              await deletePortfolioEntry(id);
+              Alert.alert('Success', 'Portfolio entry deleted successfully!');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete portfolio entry. Please try again.');
+            }
+          },
         },
       ]
     );
@@ -254,13 +261,17 @@ export default function TableScreen() {
     const currentYearData = yearlyData.find(d => d.year === currentYear);
     const target = currentYearData ? currentYearData.assetValue : 0;
 
-    const result = await updatePortfolioEntry(editingEntry, amount, target);
-    if (result) {
-      setShowEditModal(false);
-      setEditingEntry(null);
-      setEditValue('');
-      Alert.alert('Success', 'Portfolio entry updated successfully!');
-    } else {
+    try {
+      const result = await updatePortfolioEntry(editingEntry, amount, target);
+      if (result) {
+        setShowEditModal(false);
+        setEditingEntry(null);
+        setEditValue('');
+        Alert.alert('Success', 'Portfolio entry updated successfully!');
+      } else {
+        Alert.alert('Error', 'Failed to update portfolio entry. Please try again.');
+      }
+    } catch (error) {
       Alert.alert('Error', 'Failed to update portfolio entry. Please try again.');
     }
   };
