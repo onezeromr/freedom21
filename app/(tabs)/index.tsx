@@ -119,10 +119,20 @@ export default function CalculatorScreen() {
 
   // Load saved scenarios
   useEffect(() => {
-    const savedScenarios = localStorage.getItem('freedom21_scenarios');
-    if (savedScenarios) {
-      setScenarios(JSON.parse(savedScenarios));
-    }
+    const loadScenarios = () => {
+      try {
+        if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+          const savedScenarios = localStorage.getItem('freedom21_scenarios');
+          if (savedScenarios) {
+            setScenarios(JSON.parse(savedScenarios));
+          }
+        }
+      } catch (error) {
+        console.error('Error loading scenarios:', error);
+      }
+    };
+
+    loadScenarios();
   }, []);
 
   // Update portfolio state when values change (with debouncing)
@@ -166,9 +176,9 @@ export default function CalculatorScreen() {
   };
 
   const handleCAGRUpdate = (newCAGR: number) => {
-    // Only update CAGR if it's different from the current value
-    // This prevents overriding user's manual adjustments
-    if (newCAGR !== customCAGR) {
+    // Only update CAGR if user hasn't manually changed it from the default
+    const currentAsset = ASSET_OPTIONS.find(a => a.name === selectedAsset);
+    if (currentAsset && customCAGR === currentAsset.defaultCAGR) {
       setCustomCAGR(newCAGR);
     }
   };
@@ -214,9 +224,16 @@ export default function CalculatorScreen() {
 
     const updatedScenarios = [...scenarios, newScenario];
     setScenarios(updatedScenarios);
-    localStorage.setItem('freedom21_scenarios', JSON.stringify(updatedScenarios));
-    setScenarioName('');
     
+    try {
+      if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+        localStorage.setItem('freedom21_scenarios', JSON.stringify(updatedScenarios));
+      }
+    } catch (error) {
+      console.error('Error saving scenario:', error);
+    }
+    
+    setScenarioName('');
     Alert.alert('Success', `Scenario "${newScenario.name}" saved successfully!`);
   };
 
@@ -260,6 +277,9 @@ export default function CalculatorScreen() {
           {asset.name}
         </Text>
         <Text style={styles.assetFullName}>{asset.fullName}</Text>
+        <Text style={styles.assetSuggestion}>
+          Suggested: {asset.defaultCAGR}%
+        </Text>
       </View>
       <Text style={[styles.assetCAGR, isSelected && styles.assetCAGRSelected]}>
         {asset.defaultCAGR}%
@@ -925,6 +945,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#94A3B8',
+    marginBottom: 2,
+  },
+  assetSuggestion: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#00D4AA',
+    fontStyle: 'italic',
   },
   assetCAGR: {
     fontSize: 18,

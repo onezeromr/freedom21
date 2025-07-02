@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { X, Mail, Lock, User, Eye, EyeOff } from 'lucide-react-native';
+import { X, Mail, Lock, User, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 
 interface AuthModalProps {
@@ -26,6 +26,7 @@ export default function AuthModal({ visible, onClose, initialMode = 'signin' }: 
   const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   
   const { signIn, signUp, resetPassword } = useAuth();
 
@@ -35,11 +36,20 @@ export default function AuthModal({ visible, onClose, initialMode = 'signin' }: 
     setFullName('');
     setShowPassword(false);
     setLoading(false);
+    setShowSuccess(false);
   };
 
   const handleClose = () => {
     resetForm();
     onClose();
+  };
+
+  const showSuccessMessage = (message: string) => {
+    setShowSuccess(true);
+    setTimeout(() => {
+      setShowSuccess(false);
+      handleClose();
+    }, 2000);
   };
 
   const handleSubmit = async () => {
@@ -66,9 +76,7 @@ export default function AuthModal({ visible, onClose, initialMode = 'signin' }: 
         if (error) {
           Alert.alert('Sign In Error', error.message);
         } else {
-          Alert.alert('Success', 'Welcome back!', [
-            { text: 'OK', onPress: handleClose }
-          ]);
+          showSuccessMessage('Welcome back! You\'re now signed in.');
         }
       } else if (mode === 'signup') {
         const { error } = await signUp(email, password, fullName);
@@ -114,6 +122,7 @@ export default function AuthModal({ visible, onClose, initialMode = 'signin' }: 
     setPassword('');
     setFullName('');
     setLoading(false);
+    setShowSuccess(false);
   };
 
   const getTitle = () => {
@@ -145,141 +154,155 @@ export default function AuthModal({ visible, onClose, initialMode = 'signin' }: 
             colors={['#0A0E1A', '#1E293B']}
             style={styles.gradient}
           >
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.title}>{getTitle()}</Text>
-              <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-                <X size={24} color="#94A3B8" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Form */}
-            <View style={styles.form}>
-              {mode === 'signup' && (
-                <View style={styles.inputContainer}>
-                  <View style={styles.inputWrapper}>
-                    <User size={20} color="#94A3B8" style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Full Name"
-                      placeholderTextColor="#64748B"
-                      value={fullName}
-                      onChangeText={setFullName}
-                      autoCapitalize="words"
-                      editable={!loading}
-                    />
-                  </View>
-                </View>
-              )}
-
-              <View style={styles.inputContainer}>
-                <View style={styles.inputWrapper}>
-                  <Mail size={20} color="#94A3B8" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Email"
-                    placeholderTextColor="#64748B"
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    editable={!loading}
-                  />
-                </View>
+            {/* Success State */}
+            {showSuccess && (
+              <View style={styles.successContainer}>
+                <CheckCircle size={64} color="#00D4AA" />
+                <Text style={styles.successTitle}>Success!</Text>
+                <Text style={styles.successMessage}>You're now signed in</Text>
               </View>
+            )}
 
-              {mode !== 'reset' && (
-                <View style={styles.inputContainer}>
-                  <View style={styles.inputWrapper}>
-                    <Lock size={20} color="#94A3B8" style={styles.inputIcon} />
-                    <TextInput
-                      style={[styles.input, styles.passwordInput]}
-                      placeholder="Password"
-                      placeholderTextColor="#64748B"
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry={!showPassword}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      editable={!loading}
-                    />
-                    <TouchableOpacity
-                      onPress={() => setShowPassword(!showPassword)}
-                      style={styles.eyeButton}
-                      disabled={loading}
-                    >
-                      {showPassword ? (
-                        <EyeOff size={20} color="#94A3B8" />
-                      ) : (
-                        <Eye size={20} color="#94A3B8" />
-                      )}
-                    </TouchableOpacity>
-                  </View>
+            {/* Normal Form */}
+            {!showSuccess && (
+              <>
+                {/* Header */}
+                <View style={styles.header}>
+                  <Text style={styles.title}>{getTitle()}</Text>
+                  <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+                    <X size={24} color="#94A3B8" />
+                  </TouchableOpacity>
                 </View>
-              )}
 
-              {/* Submit Button */}
-              <TouchableOpacity
-                style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-                onPress={handleSubmit}
-                disabled={loading}
-              >
-                <LinearGradient
-                  colors={['#00D4AA', '#00A887']}
-                  style={styles.submitGradient}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.submitText}>{getButtonText()}</Text>
+                {/* Form */}
+                <View style={styles.form}>
+                  {mode === 'signup' && (
+                    <View style={styles.inputContainer}>
+                      <View style={styles.inputWrapper}>
+                        <User size={20} color="#94A3B8" style={styles.inputIcon} />
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Full Name"
+                          placeholderTextColor="#64748B"
+                          value={fullName}
+                          onChangeText={setFullName}
+                          autoCapitalize="words"
+                          editable={!loading}
+                        />
+                      </View>
+                    </View>
                   )}
-                </LinearGradient>
-              </TouchableOpacity>
 
-              {/* Mode Switching */}
-              <View style={styles.switchContainer}>
-                {mode === 'signin' && (
-                  <>
-                    <TouchableOpacity onPress={() => switchMode('signup')} disabled={loading}>
-                      <Text style={styles.switchText}>
-                        Don't have an account? <Text style={styles.switchLink}>Sign up</Text>
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => switchMode('reset')} style={styles.forgotPassword} disabled={loading}>
-                      <Text style={styles.switchLink}>Forgot password?</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
+                  <View style={styles.inputContainer}>
+                    <View style={styles.inputWrapper}>
+                      <Mail size={20} color="#94A3B8" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Email"
+                        placeholderTextColor="#64748B"
+                        value={email}
+                        onChangeText={setEmail}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        editable={!loading}
+                      />
+                    </View>
+                  </View>
 
-                {mode === 'signup' && (
-                  <TouchableOpacity onPress={() => switchMode('signin')} disabled={loading}>
-                    <Text style={styles.switchText}>
-                      Already have an account? <Text style={styles.switchLink}>Sign in</Text>
-                    </Text>
+                  {mode !== 'reset' && (
+                    <View style={styles.inputContainer}>
+                      <View style={styles.inputWrapper}>
+                        <Lock size={20} color="#94A3B8" style={styles.inputIcon} />
+                        <TextInput
+                          style={[styles.input, styles.passwordInput]}
+                          placeholder="Password"
+                          placeholderTextColor="#64748B"
+                          value={password}
+                          onChangeText={setPassword}
+                          secureTextEntry={!showPassword}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          editable={!loading}
+                        />
+                        <TouchableOpacity
+                          onPress={() => setShowPassword(!showPassword)}
+                          style={styles.eyeButton}
+                          disabled={loading}
+                        >
+                          {showPassword ? (
+                            <EyeOff size={20} color="#94A3B8" />
+                          ) : (
+                            <Eye size={20} color="#94A3B8" />
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Submit Button */}
+                  <TouchableOpacity
+                    style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                    onPress={handleSubmit}
+                    disabled={loading}
+                  >
+                    <LinearGradient
+                      colors={['#00D4AA', '#00A887']}
+                      style={styles.submitGradient}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.submitText}>{getButtonText()}</Text>
+                      )}
+                    </LinearGradient>
                   </TouchableOpacity>
-                )}
 
-                {mode === 'reset' && (
-                  <TouchableOpacity onPress={() => switchMode('signin')} disabled={loading}>
-                    <Text style={styles.switchText}>
-                      Remember your password? <Text style={styles.switchLink}>Sign in</Text>
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
+                  {/* Mode Switching */}
+                  <View style={styles.switchContainer}>
+                    {mode === 'signin' && (
+                      <>
+                        <TouchableOpacity onPress={() => switchMode('signup')} disabled={loading}>
+                          <Text style={styles.switchText}>
+                            Don't have an account? <Text style={styles.switchLink}>Sign up</Text>
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => switchMode('reset')} style={styles.forgotPassword} disabled={loading}>
+                          <Text style={styles.switchLink}>Forgot password?</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
 
-            {/* Benefits */}
-            <View style={styles.benefits}>
-              <Text style={styles.benefitsTitle}>Why create an account?</Text>
-              <View style={styles.benefitsList}>
-                <Text style={styles.benefitItem}>☁️ Sync scenarios across all devices</Text>
-                <Text style={styles.benefitItem}>🤝 Share strategies with advisors</Text>
-                <Text style={styles.benefitItem}>📊 Access advanced analytics</Text>
-                <Text style={styles.benefitItem}>🔒 Secure cloud backup</Text>
-              </View>
-            </View>
+                    {mode === 'signup' && (
+                      <TouchableOpacity onPress={() => switchMode('signin')} disabled={loading}>
+                        <Text style={styles.switchText}>
+                          Already have an account? <Text style={styles.switchLink}>Sign in</Text>
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {mode === 'reset' && (
+                      <TouchableOpacity onPress={() => switchMode('signin')} disabled={loading}>
+                        <Text style={styles.switchText}>
+                          Remember your password? <Text style={styles.switchLink}>Sign in</Text>
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+
+                {/* Benefits */}
+                <View style={styles.benefits}>
+                  <Text style={styles.benefitsTitle}>Why create an account?</Text>
+                  <View style={styles.benefitsList}>
+                    <Text style={styles.benefitItem}>☁️ Sync scenarios across all devices</Text>
+                    <Text style={styles.benefitItem}>🤝 Share strategies with advisors</Text>
+                    <Text style={styles.benefitItem}>📊 Access advanced analytics</Text>
+                    <Text style={styles.benefitItem}>🔒 Secure cloud backup</Text>
+                  </View>
+                </View>
+              </>
+            )}
           </LinearGradient>
         </View>
       </View>
@@ -302,6 +325,23 @@ const styles = StyleSheet.create({
   gradient: {
     padding: 24,
     paddingBottom: 40,
+  },
+  successContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#00D4AA',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  successMessage: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
+    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
