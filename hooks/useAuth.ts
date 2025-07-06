@@ -156,8 +156,8 @@ export function useAuth() {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      // Force sign out with scope 'local' to clear all sessions
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
 
       if (error) {
         console.error('Sign out error:', error);
@@ -165,7 +165,7 @@ export function useAuth() {
         return { error };
       }
 
-      // Clear auth state immediately
+      // Force clear the auth state immediately
       setAuthState({
         user: null,
         session: null,
@@ -173,28 +173,25 @@ export function useAuth() {
         error: null,
       });
 
-      // Clear local storage items
+      // Clear any remaining local storage
       try {
         if (typeof localStorage !== 'undefined') {
-          // Clear Supabase auth tokens
-          const supabaseKey = `sb-${supabase.supabaseUrl.split('//')[1].split('.')[0]}-auth-token`;
-          localStorage.removeItem(supabaseKey);
           localStorage.removeItem('supabase.auth.token');
           
-          // Clear all Supabase related items
+          // Get the Supabase URL hostname for the auth token key
+          const hostname = supabase.supabaseUrl.split('//')[1];
+          const supabaseKey = `sb-${hostname}-auth-token`;
+          localStorage.removeItem(supabaseKey);
+          
+          // Clear all Supabase auth related items
           Object.keys(localStorage).forEach(key => {
-            if (key.includes('supabase') || key.startsWith('sb-')) {
+            if (key.includes('supabase') || key.includes('sb-')) {
               localStorage.removeItem(key);
             }
           });
         }
       } catch (storageError) {
         console.log('Storage clear error (non-critical):', storageError);
-      }
-
-      // Force reload the page to ensure complete sign out
-      if (typeof window !== 'undefined') {
-        window.location.reload();
       }
 
       console.log('Sign out successful');

@@ -60,14 +60,14 @@ export default function SettingsScreen() {
               if (result.error) {
                 console.error('Sign out failed:', result.error);
                 Alert.alert('Error', `Failed to sign out: ${result.error.message}`);
-                setSigningOut(false);
               } else {
                 console.log('Sign out successful from settings');
-                // Don't set signingOut to false here since page will reload
+                // Success - the auth state will update automatically
               }
             } catch (error) {
               console.error('Unexpected sign out error:', error);
               Alert.alert('Error', 'An unexpected error occurred while signing out.');
+            } finally {
               setSigningOut(false);
             }
           },
