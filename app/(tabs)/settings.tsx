@@ -54,18 +54,14 @@ export default function SettingsScreen() {
           onPress: async () => {
             setSigningOut(true);
             try {
-              const { error } = await signOut();
-              if (error) {
-                console.error('Sign out error:', error);
-                Alert.alert('Error', `Failed to sign out: ${error.message}`);
-              } else {
-                // Don't show success alert, just let the UI update naturally
-                console.log('Successfully signed out');
-              }
+              await signOut();
+              // Force a small delay to ensure state updates
+              setTimeout(() => {
+                setSigningOut(false);
+              }, 500);
             } catch (error) {
               console.error('Unexpected sign out error:', error);
               Alert.alert('Error', 'An unexpected error occurred while signing out.');
-            } finally {
               setSigningOut(false);
             }
           },

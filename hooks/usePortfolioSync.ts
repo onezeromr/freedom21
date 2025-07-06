@@ -407,10 +407,7 @@ export function usePortfolioSync() {
   }, [user, loadPortfolioEntries]);
 
   // Update portfolio entry
-  const updatePortfolioEntry = useCallback(async (id: string, amount: number, target: number) => {
-  }, [user, loadPortfolioEntries]);
-
-  const updatePortfolioEntryWithDate = useCallback(async (id: string, amount: number, target: number, date?: string) => {
+  const updatePortfolioEntry = useCallback(async (id: string, amount: number, target: number, date?: string) => {
     if (!user) {
       alert('Please sign in to update portfolio entries');
       return null;
@@ -478,7 +475,7 @@ export function usePortfolioSync() {
 
       if (error) {
         console.error('Error deleting portfolio entry:', error);
-        throw error;
+        return false;
       }
 
       console.log('Portfolio entry deleted successfully');
@@ -488,7 +485,7 @@ export function usePortfolioSync() {
       return true;
     } catch (error) {
       console.error('Error deleting portfolio entry:', error);
-      throw error;
+      return false;
     }
   }, [user, loadPortfolioEntries]);
 
