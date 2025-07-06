@@ -408,6 +408,7 @@ export function usePortfolioSync() {
 
   // Update portfolio entry
   const updatePortfolioEntry = useCallback(async (id: string, amount: number, target: number) => {
+  const updatePortfolioEntry = useCallback(async (id: string, amount: number, target: number, date?: string) => {
     if (!user) {
       alert('Please sign in to update portfolio entries');
       return null;
@@ -417,14 +418,21 @@ export function usePortfolioSync() {
       const variance = amount - target;
       const variance_percentage = target > 0 ? (variance / target) * 100 : 0;
 
+      const updateData: any = {
+        amount,
+        variance,
+        variance_percentage,
+        target,
+      };
+
+      // If date is provided, update the created_at timestamp
+      if (date) {
+        updateData.created_at = new Date(date).toISOString();
+      }
+
       const { data, error } = await supabase
         .from('portfolio_entries')
-        .update({
-          amount,
-          variance,
-          variance_percentage,
-          target,
-        })
+        .update(updateData)
         .eq('id', id)
         .eq('user_id', user.id)
         .select()

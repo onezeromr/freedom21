@@ -11,7 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Table, Calendar, DollarSign, TrendingUp, Plus, Trash2, User, LogIn, CreditCard as Edit3, X, Check } from 'lucide-react-native';
+import { Table, Calendar, DollarSign, TrendingUp, Plus, Trash2, User, LogIn, Edit3, X, Check } from 'lucide-react-native';
 import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 import { usePortfolioSync } from '@/hooks/usePortfolioSync';
@@ -44,7 +44,9 @@ export default function TableScreen() {
   const [currentPortfolioValue, setCurrentPortfolioValue] = useState('');
   const [editingEntry, setEditingEntry] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [editDate, setEditDate] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
+  const [deletingEntry, setDeletingEntry] = useState<string | null>(null);
 
   const isMobile = screenWidth < 768;
 
@@ -217,6 +219,11 @@ export default function TableScreen() {
       return;
     }
 
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to delete portfolio entries.');
+      return;
+    }
+
     Alert.alert(
       'Delete Entry',
       'Are you sure you want to delete this portfolio entry?',
@@ -226,6 +233,7 @@ export default function TableScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            setDeletingEntry(id);
             try {
               console.log('Attempting to delete entry:', id);
               const success = await deletePortfolioEntry(id);
@@ -237,6 +245,8 @@ export default function TableScreen() {
             } catch (error) {
               console.error('Delete error:', error);
               Alert.alert('Error', 'Failed to delete portfolio entry. Please try again.');
+            } finally {
+              setDeletingEntry(null);
             }
           },
         },
@@ -244,15 +254,26 @@ export default function TableScreen() {
     );
   };
 
-  const handleEditEntry = (id: string, currentAmount: number) => {
+  const handleEditEntry = (id: string, currentAmount: number, currentDate: string) => {
     // Check if it's a sample entry
     if (id.startsWith('sample-')) {
       Alert.alert('Cannot Edit', 'Sample entries cannot be edited. Sign in to manage your own portfolio entries.');
       return;
     }
 
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to edit portfolio entries.');
+      return;
+    }
+
     setEditingEntry(id);
     setEditValue(currentAmount.toString());
+    
+    // Format the date for the input (YYYY-MM-DD format)
+    const date = new Date(currentDate);
+    const formattedDate = date.toISOString().split('T')[0];
+    setEditDate(formattedDate);
+    
     setShowEditModal(true);
   };
 
@@ -268,17 +289,33 @@ export default function TableScreen() {
       return;
     }
 
+    if (!editDate) {
+      Alert.alert('Error', 'Please select a valid date');
+      return;
+    }
+
+    // Validate date is not in the future
+    const selectedDate = new Date(editDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+    
+    if (selectedDate > today) {
+      Alert.alert('Error', 'Date cannot be in the future');
+      return;
+    }
+
     // Get current year target from yearly data
     const currentYear = new Date().getFullYear();
     const currentYearData = yearlyData.find(d => d.year === currentYear);
     const target = currentYearData ? currentYearData.assetValue : 0;
 
     try {
-      const result = await updatePortfolioEntry(editingEntry, amount, target);
+      const result = await updatePortfolioEntry(editingEntry, amount, target, editDate);
       if (result) {
         setShowEditModal(false);
         setEditingEntry(null);
         setEditValue('');
+        setEditDate('');
         Alert.alert('Success', 'Portfolio entry updated successfully!');
       } else {
         Alert.alert('Error', 'Failed to update portfolio entry. Please try again.');
@@ -482,18 +519,24 @@ export default function TableScreen() {
                       </View>
                       <View style={styles.actionsCell}>
                         <TouchableOpacity
-                          style={styles.actionButton}
-                          onPress={() => handleEditEntry(entry.id, entry.amount)}
+                          style={[styles.actionButton, entry.id.startsWith('sample-') && styles.actionButtonDisabled]}
+                          onPress={() => handleEditEntry(entry.id, entry.amount, entry.created_at)}
                           activeOpacity={0.7}
+                          disabled={entry.id.startsWith('sample-')}
                         >
-                          <Edit3 size={16} color="#00D4AA" />
+                          <Edit3 size={16} color={entry.id.startsWith('sample-') ? "#64748B" : "#00D4AA"} />
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={styles.actionButton}
+                          style={[
+                            styles.actionButton, 
+                            entry.id.startsWith('sample-') && styles.actionButtonDisabled,
+                            deletingEntry === entry.id && styles.actionButtonLoading
+                          ]}
                           onPress={() => handleDeleteEntry(entry.id)}
                           activeOpacity={0.7}
+                          disabled={entry.id.startsWith('sample-') || deletingEntry === entry.id}
                         >
-                          <Trash2 size={16} color="#EF4444" />
+                          <Trash2 size={16} color={entry.id.startsWith('sample-') ? "#64748B" : "#EF4444"} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -674,6 +717,7 @@ export default function TableScreen() {
                     setShowEditModal(false);
                     setEditingEntry(null);
                     setEditValue('');
+                    setEditDate('');
                   }}
                   style={styles.modalClose}
                 >
@@ -682,16 +726,31 @@ export default function TableScreen() {
               </View>
 
               <View style={styles.modalContent}>
-                <Text style={styles.modalLabel}>Portfolio Amount</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={editValue}
-                  onChangeText={setEditValue}
-                  placeholder="Enter portfolio value"
-                  placeholderTextColor="#64748B"
-                  keyboardType="numeric"
-                  autoFocus
-                />
+                <View style={styles.modalField}>
+                  <Text style={styles.modalLabel}>Portfolio Amount</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={editValue}
+                    onChangeText={setEditValue}
+                    placeholder="Enter portfolio value"
+                    placeholderTextColor="#64748B"
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                <View style={styles.modalField}>
+                  <Text style={styles.modalLabel}>Date</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={editDate}
+                    onChangeText={setEditDate}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor="#64748B"
+                  />
+                  <Text style={styles.modalHint}>
+                    💡 Use YYYY-MM-DD format (e.g., 2024-01-15). Date cannot be in the future.
+                  </Text>
+                </View>
 
                 <View style={styles.modalActions}>
                   <TouchableOpacity
@@ -700,6 +759,7 @@ export default function TableScreen() {
                       setShowEditModal(false);
                       setEditingEntry(null);
                       setEditValue('');
+                      setEditDate('');
                     }}
                     activeOpacity={0.8}
                   >
@@ -943,6 +1003,12 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  actionButtonDisabled: {
+    opacity: 0.5,
+  },
+  actionButtonLoading: {
+    opacity: 0.6,
   },
   sampleIndicator: {
     backgroundColor: 'rgba(0, 212, 170, 0.1)',
@@ -1283,6 +1349,9 @@ const styles = StyleSheet.create({
   modalContent: {
     gap: 20,
   },
+  modalField: {
+    gap: 8,
+  },
   modalLabel: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
@@ -1297,6 +1366,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalHint: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#00D4AA',
+    backgroundColor: 'rgba(0, 212, 170, 0.1)',
+    padding: 8,
+    borderRadius: 6,
   },
   modalActions: {
     flexDirection: 'row',
