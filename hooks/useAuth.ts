@@ -153,19 +153,21 @@ export function useAuth() {
 
   const signOut = async () => {
     console.log('Starting sign out process...');
-    setAuthState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
+      // First, clear analytics user ID
+      await analyticsService.setUserId('');
+      
       // Clear the session from Supabase
       const { error } = await supabase.auth.signOut();
 
       if (error) {
         console.error('Sign out error:', error);
-        setAuthState(prev => ({ ...prev, loading: false, error }));
-        return { error };
+        // Even if there's an error, force clear the local state
+        console.log('Forcing local sign out despite error');
       }
 
-      // Clear auth state immediately after successful sign out
+      // Force clear the auth state regardless of API response
       setAuthState({
         user: null,
         session: null,
@@ -173,16 +175,24 @@ export function useAuth() {
         error: null,
       });
 
-      // Clear local storage
+      // Clear local storage (with better error handling)
       try {
         if (typeof localStorage !== 'undefined') {
-          localStorage.removeItem('supabase.auth.token');
-          localStorage.removeItem('sb-' + supabase.supabaseUrl.split('//')[1] + '-auth-token');
+          // Get all localStorage keys first to avoid modification during iteration
+          const keys = Object.keys(localStorage);
+          const authKeys = keys.filter(key => 
+            key.includes('supabase') || 
+            key.includes('sb-') || 
+            key.startsWith('supabase.') ||
+            key.includes('auth')
+          );
           
-          // Clear all Supabase auth related items
-          Object.keys(localStorage).forEach(key => {
-            if (key.includes('supabase') || key.includes('sb-')) {
+          // Remove auth-related keys
+          authKeys.forEach(key => {
+            try {
               localStorage.removeItem(key);
+            } catch (e) {
+              console.log('Could not remove key:', key);
             }
           });
         }
@@ -194,9 +204,17 @@ export function useAuth() {
       return { error: null };
     } catch (err) {
       console.error('Unexpected sign out error:', err);
-      const error = err as AuthError;
-      setAuthState(prev => ({ ...prev, loading: false, error }));
-      return { error };
+      
+      // Force clear state even on unexpected errors
+      setAuthState({
+        user: null,
+        session: null,
+        loading: false,
+        error: null,
+      });
+      
+      console.log('Forced sign out due to error');
+      return { error: err as AuthError };
     }
   };
 

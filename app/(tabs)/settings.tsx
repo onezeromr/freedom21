@@ -43,6 +43,11 @@ export default function SettingsScreen() {
   };
 
   const handleSignOut = async () => {
+    if (signingOut || loading) {
+      console.log('Sign out already in progress or auth loading');
+      return;
+    }
+    
     Alert.alert(
       'Sign Out',
       'Are you sure you want to sign out? Your scenarios will remain saved in the cloud.',
@@ -52,20 +57,26 @@ export default function SettingsScreen() {
           text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
+            console.log('User confirmed sign out');
             setSigningOut(true);
             try {
+              console.log('Calling signOut...');
               const { error } = await signOut();
+              console.log('signOut result:', { error });
+              
               if (error) {
                 console.error('Sign out error:', error);
-                Alert.alert('Error', `Failed to sign out: ${error.message}`);
+                // Don't show error alert since we force sign out anyway
+                console.log('Sign out completed despite error');
               } else {
-                // Don't show success alert, just let the UI update naturally
                 console.log('Successfully signed out');
               }
             } catch (error) {
               console.error('Unexpected sign out error:', error);
-              Alert.alert('Error', 'An unexpected error occurred while signing out.');
+              // Don't show error alert since we force sign out anyway
+              console.log('Sign out completed despite unexpected error');
             } finally {
+              console.log('Clearing signingOut state');
               setSigningOut(false);
             }
           },

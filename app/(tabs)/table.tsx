@@ -213,7 +213,9 @@ export default function TableScreen() {
   };
 
   const handleDeleteEntry = async (id: string) => {
-    // Check if it's a sample entry
+    console.log('handleDeleteEntry called with id:', id);
+    
+    // Check if it's a sample entry first
     if (id.startsWith('sample-')) {
       Alert.alert('Cannot Delete', 'Sample entries cannot be deleted. Sign in to manage your own portfolio entries.');
       return;
@@ -221,6 +223,12 @@ export default function TableScreen() {
 
     if (!user) {
       Alert.alert('Sign In Required', 'Please sign in to delete portfolio entries.');
+      return;
+    }
+
+    // Prevent multiple simultaneous deletions
+    if (deletingEntry) {
+      console.log('Delete already in progress, ignoring');
       return;
     }
 
@@ -233,17 +241,25 @@ export default function TableScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            console.log('User confirmed deletion for id:', id);
             setDeletingEntry(id);
             try {
+              console.log('Calling deletePortfolioEntry...');
               const success = await deletePortfolioEntry(id);
+              console.log('deletePortfolioEntry result:', success);
+              
               if (success) {
+                console.log('Delete successful, showing success alert');
                 Alert.alert('Success', 'Portfolio entry deleted successfully!');
               } else {
+                console.log('Delete failed, showing error alert');
                 Alert.alert('Error', 'Failed to delete portfolio entry. Please try again.');
               }
             } catch (error) {
+              console.error('Error in delete handler:', error);
               Alert.alert('Error', 'Failed to delete portfolio entry. Please try again.');
             } finally {
+              console.log('Clearing deletingEntry state');
               setDeletingEntry(null);
             }
           },

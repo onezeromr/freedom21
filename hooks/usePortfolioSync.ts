@@ -453,19 +453,21 @@ export function usePortfolioSync() {
 
   // Delete portfolio entry - Fixed implementation
   const deletePortfolioEntry = useCallback(async (id: string) => {
+    console.log('deletePortfolioEntry called with id:', id);
+    
     if (!user) {
-      console.log('No user authenticated');
+      console.error('No user authenticated for delete operation');
       return false;
     }
 
     // Don't allow deletion of sample entries
     if (id.startsWith('sample-')) {
-      console.log('Cannot delete sample entries');
+      console.error('Cannot delete sample entries');
       return false;
     }
 
     try {
-      console.log(`Attempting to delete portfolio entry: ${id} for user: ${user.id}`);
+      console.log('Attempting to delete portfolio entry:', { id, userId: user.id });
       
       const { error } = await supabase
         .from('portfolio_entries')
@@ -474,17 +476,18 @@ export function usePortfolioSync() {
         .eq('user_id', user.id);
 
       if (error) {
-        console.error('Error deleting portfolio entry:', error);
-        return false;
+        console.error('Supabase delete error:', error);
+        throw new Error(`Database error: ${error.message}`);
       }
 
-      console.log('Portfolio entry deleted successfully');
+      console.log('Portfolio entry deleted successfully from database');
       
       // Reload entries to reflect the change
       await loadPortfolioEntries();
+      console.log('Portfolio entries reloaded after deletion');
       return true;
     } catch (error) {
-      console.error('Error deleting portfolio entry:', error);
+      console.error('Unexpected error in deletePortfolioEntry:', error);
       return false;
     }
   }, [user, loadPortfolioEntries]);

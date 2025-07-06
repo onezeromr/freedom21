@@ -183,9 +183,9 @@ class AnalyticsService {
 
     try {
       if (Platform.OS === 'web' && this.webAnalytics) {
-        setUserId(this.webAnalytics, userId);
+        setUserId(this.webAnalytics, userId || null);
       } else if (mobileAnalytics) {
-        await mobileAnalytics().setUserId(userId);
+        await mobileAnalytics().setUserId(userId || null);
       }
     } catch (error) {
       console.error('Error setting user ID:', error);
