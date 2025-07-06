@@ -453,8 +453,6 @@ export function usePortfolioSync() {
 
   // Delete portfolio entry - Fixed implementation
   const deletePortfolioEntry = useCallback(async (id: string) => {
-    console.log('deletePortfolioEntry called with id:', id);
-    
     if (!user) {
       console.log('No user authenticated');
       return false;
@@ -477,7 +475,7 @@ export function usePortfolioSync() {
 
       if (error) {
         console.error('Error deleting portfolio entry:', error);
-        throw error;
+        return false;
       }
 
       console.log('Portfolio entry deleted successfully');
@@ -487,7 +485,7 @@ export function usePortfolioSync() {
       return true;
     } catch (error) {
       console.error('Error deleting portfolio entry:', error);
-      throw error;
+      return false;
     }
   }, [user, loadPortfolioEntries]);
 

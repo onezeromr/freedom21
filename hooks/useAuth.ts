@@ -156,7 +156,7 @@ export function useAuth() {
     setAuthState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      // Sign out from Supabase
+      // Clear the session from Supabase
       const { error } = await supabase.auth.signOut();
 
       if (error) {
@@ -165,7 +165,7 @@ export function useAuth() {
         return { error };
       }
 
-      // Force clear the auth state immediately
+      // Clear auth state immediately after successful sign out
       setAuthState({
         user: null,
         session: null,
@@ -173,15 +173,11 @@ export function useAuth() {
         error: null,
       });
 
-      // Clear any remaining local storage
+      // Clear local storage
       try {
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem('supabase.auth.token');
-          
-          // Get the Supabase URL hostname for the auth token key
-          const hostname = supabase.supabaseUrl.split('//')[1];
-          const supabaseKey = `sb-${hostname}-auth-token`;
-          localStorage.removeItem(supabaseKey);
+          localStorage.removeItem('sb-' + supabase.supabaseUrl.split('//')[1] + '-auth-token');
           
           // Clear all Supabase auth related items
           Object.keys(localStorage).forEach(key => {

@@ -54,15 +54,13 @@ export default function SettingsScreen() {
           onPress: async () => {
             setSigningOut(true);
             try {
-              console.log('Starting sign out from settings...');
-              const result = await signOut();
-              
-              if (result.error) {
-                console.error('Sign out failed:', result.error);
-                Alert.alert('Error', `Failed to sign out: ${result.error.message}`);
+              const { error } = await signOut();
+              if (error) {
+                console.error('Sign out error:', error);
+                Alert.alert('Error', `Failed to sign out: ${error.message}`);
               } else {
-                console.log('Sign out successful from settings');
-                // Success - the auth state will update automatically
+                // Don't show success alert, just let the UI update naturally
+                console.log('Successfully signed out');
               }
             } catch (error) {
               console.error('Unexpected sign out error:', error);
