@@ -239,8 +239,11 @@ export default function TableScreen() {
             try {
               console.log('Attempting to delete entry:', id);
               const success = await deletePortfolioEntry(id);
-              console.log('Delete result:', success);
-              // Don't show additional alerts here since deletePortfolioEntry handles them
+              if (success) {
+                Alert.alert('Success', 'Portfolio entry deleted successfully!');
+              } else {
+                Alert.alert('Error', 'Failed to delete portfolio entry. Please try again.');
+              }
             } catch (error) {
               console.error('Delete error:', error);
               Alert.alert('Error', 'Failed to delete portfolio entry. Please try again.');
