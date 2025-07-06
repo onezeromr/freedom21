@@ -10,6 +10,9 @@ export function useAnalyticsTracking() {
   useEffect(() => {
     // Initialize analytics on first load
     analyticsService.initialize();
+    
+    // Track app open on first load
+    analyticsService.trackAppOpen();
   }, []);
 
   useEffect(() => {
@@ -47,17 +50,19 @@ export function useEngagementTracking() {
     startTime.current = Date.now();
 
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // Track engagement when user leaves
-        if (startTime.current && isActive.current) {
-          const engagementTime = Date.now() - startTime.current;
-          analyticsService.trackEngagement(engagementTime);
+      if (typeof document !== 'undefined') {
+        if (document.hidden) {
+          // Track engagement when user leaves
+          if (startTime.current && isActive.current) {
+            const engagementTime = Date.now() - startTime.current;
+            analyticsService.trackEngagement(engagementTime);
+          }
+          isActive.current = false;
+        } else {
+          // Reset timer when user returns
+          startTime.current = Date.now();
+          isActive.current = true;
         }
-        isActive.current = false;
-      } else {
-        // Reset timer when user returns
-        startTime.current = Date.now();
-        isActive.current = true;
       }
     };
 
@@ -68,8 +73,11 @@ export function useEngagementTracking() {
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    // Only add event listeners in web environment
+    if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('beforeunload', handleBeforeUnload);
+    }
 
     return () => {
       // Track final engagement time
@@ -78,8 +86,11 @@ export function useEngagementTracking() {
         analyticsService.trackEngagement(engagementTime);
       }
 
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Clean up event listeners
+      if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      }
     };
   }, []);
 }

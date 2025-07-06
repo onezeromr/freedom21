@@ -1,64 +1,61 @@
 import { Platform } from 'react-native';
-import analytics from '@react-native-firebase/analytics';
+import { logEvent, setUserId, setUserProperties } from 'firebase/analytics';
+import { initializeFirebaseWeb, analytics as webAnalytics } from './firebaseWeb';
 
-// Web-specific Google Analytics implementation
-declare global {
-  interface Window {
-    gtag: (...args: any[]) => void;
-    dataLayer: any[];
+// Import React Native Firebase for mobile
+let mobileAnalytics: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    mobileAnalytics = require('@react-native-firebase/analytics').default;
+  } catch (error) {
+    console.log('React Native Firebase not available');
   }
 }
 
 class AnalyticsService {
   private isInitialized = false;
+  private webAnalytics: any = null;
 
   async initialize() {
     if (this.isInitialized) return;
 
     if (Platform.OS === 'web') {
-      // Initialize Google Analytics for web
-      this.initializeWebAnalytics();
+      // Initialize Firebase Web Analytics
+      const firebaseWeb = initializeFirebaseWeb();
+      if (firebaseWeb?.analytics) {
+        this.webAnalytics = firebaseWeb.analytics;
+        console.log('Firebase Web Analytics initialized');
+      }
     } else {
-      // Firebase Analytics is automatically initialized on mobile
-      await analytics().setAnalyticsCollectionEnabled(true);
+      // Initialize React Native Firebase Analytics
+      if (mobileAnalytics) {
+        await mobileAnalytics().setAnalyticsCollectionEnabled(true);
+        console.log('React Native Firebase Analytics initialized');
+      }
     }
 
     this.isInitialized = true;
   }
 
-  private initializeWebAnalytics() {
-    // Load Google Analytics script
-    const script1 = document.createElement('script');
-    script1.async = true;
-    script1.src = 'https://www.googletagmanager.com/gtag/js?id=G-8N2LSBDFJ5';
-    document.head.appendChild(script1);
-
-    // Initialize gtag
-    window.dataLayer = window.dataLayer || [];
-    window.gtag = function gtag() {
-      window.dataLayer.push(arguments);
-    };
-    window.gtag('js', new Date());
-    window.gtag('config', 'G-8N2LSBDFJ5', {
-      page_title: document.title,
-      page_location: window.location.href,
-    });
-  }
-
-  // Track page views
+  // Track page views / screen views
   async trackScreenView(screenName: string, screenClass?: string) {
     if (!this.isInitialized) await this.initialize();
 
-    if (Platform.OS === 'web') {
-      window.gtag?.('config', 'G-8N2LSBDFJ5', {
-        page_title: screenName,
-        page_location: window.location.href,
-      });
-    } else {
-      await analytics().logScreenView({
-        screen_name: screenName,
-        screen_class: screenClass || screenName,
-      });
+    try {
+      if (Platform.OS === 'web' && this.webAnalytics) {
+        logEvent(this.webAnalytics, 'page_view', {
+          page_title: screenName,
+          page_location: window.location.href,
+          page_path: window.location.pathname,
+        });
+      } else if (mobileAnalytics) {
+        await mobileAnalytics().logScreenView({
+          screen_name: screenName,
+          screen_class: screenClass || screenName,
+        });
+      }
+    } catch (error) {
+      console.error('Error tracking screen view:', error);
     }
   }
 
@@ -66,10 +63,14 @@ class AnalyticsService {
   async trackEvent(eventName: string, parameters?: Record<string, any>) {
     if (!this.isInitialized) await this.initialize();
 
-    if (Platform.OS === 'web') {
-      window.gtag?.('event', eventName, parameters);
-    } else {
-      await analytics().logEvent(eventName, parameters);
+    try {
+      if (Platform.OS === 'web' && this.webAnalytics) {
+        logEvent(this.webAnalytics, eventName, parameters);
+      } else if (mobileAnalytics) {
+        await mobileAnalytics().logEvent(eventName, parameters);
+      }
+    } catch (error) {
+      console.error('Error tracking event:', error);
     }
   }
 
@@ -165,12 +166,14 @@ class AnalyticsService {
   async setUserProperty(name: string, value: string) {
     if (!this.isInitialized) await this.initialize();
 
-    if (Platform.OS === 'web') {
-      window.gtag?.('config', 'G-8N2LSBDFJ5', {
-        custom_map: { [name]: value },
-      });
-    } else {
-      await analytics().setUserProperty(name, value);
+    try {
+      if (Platform.OS === 'web' && this.webAnalytics) {
+        setUserProperties(this.webAnalytics, { [name]: value });
+      } else if (mobileAnalytics) {
+        await mobileAnalytics().setUserProperty(name, value);
+      }
+    } catch (error) {
+      console.error('Error setting user property:', error);
     }
   }
 
@@ -178,13 +181,42 @@ class AnalyticsService {
   async setUserId(userId: string) {
     if (!this.isInitialized) await this.initialize();
 
-    if (Platform.OS === 'web') {
-      window.gtag?.('config', 'G-8N2LSBDFJ5', {
-        user_id: userId,
-      });
-    } else {
-      await analytics().setUserId(userId);
+    try {
+      if (Platform.OS === 'web' && this.webAnalytics) {
+        setUserId(this.webAnalytics, userId);
+      } else if (mobileAnalytics) {
+        await mobileAnalytics().setUserId(userId);
+      }
+    } catch (error) {
+      console.error('Error setting user ID:', error);
     }
+  }
+
+  // Track app opens
+  async trackAppOpen() {
+    await this.trackEvent('app_open');
+  }
+
+  // Track search events
+  async trackSearch(searchTerm: string) {
+    await this.trackEvent('search', {
+      search_term: searchTerm,
+    });
+  }
+
+  // Track purchases (for future monetization)
+  async trackPurchase(parameters: {
+    transaction_id: string;
+    value: number;
+    currency: string;
+    items?: any[];
+  }) {
+    await this.trackEvent('purchase', {
+      transaction_id: parameters.transaction_id,
+      value: parameters.value,
+      currency: parameters.currency,
+      items: parameters.items,
+    });
   }
 }
 
