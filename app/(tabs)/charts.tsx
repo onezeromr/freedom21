@@ -14,6 +14,7 @@ import GlassCard from '@/components/GlassCard';
 import ModernChart from '@/components/ModernChart';
 import CompoundInterestChart from '@/components/CompoundInterestChart';
 import { usePortfolioSync } from '@/hooks/usePortfolioSync';
+import { analyticsService } from '@/lib/analytics';
 
 const { width } = Dimensions.get('window');
 
@@ -41,6 +42,11 @@ export default function ChartsScreen() {
   useEffect(() => {
     if (mounted.current && portfolioState) {
       generateChartData();
+      // Track feature usage
+      analyticsService.trackFeatureUsage('charts_view', {
+        timeframe: selectedTimeframe,
+        asset: portfolioState.selectedAsset,
+      });
     }
   }, [selectedTimeframe, portfolioState]);
 
@@ -201,7 +207,11 @@ export default function ChartsScreen() {
         styles.timeframeButton,
         isSelected && styles.timeframeButtonActive,
       ]}
-      onPress={onPress}
+      onPress={() => {
+        onPress();
+        // Track chart interaction
+        analyticsService.trackChartInteraction('portfolio_comparison', `timeframe_${timeframe}`);
+      }}
       activeOpacity={0.8}
     >
       <Text

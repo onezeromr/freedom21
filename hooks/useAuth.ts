@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Session, User, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { analyticsService } from '@/lib/analytics';
 
 export interface AuthState {
   user: User | null;
@@ -107,6 +108,8 @@ export function useAuth() {
       // For email confirmation flow, user won't be immediately signed in
       if (data.user && !data.session) {
         console.log('User created, email confirmation required');
+        // Track sign up attempt
+        await analyticsService.trackSignUp('email');
       }
 
       setAuthState(prev => ({ ...prev, loading: false }));
@@ -131,6 +134,13 @@ export function useAuth() {
         setAuthState(prev => ({ ...prev, loading: false, error }));
       } else {
         setAuthState(prev => ({ ...prev, loading: false }));
+        // Track successful sign in
+        await analyticsService.trackSignIn('email');
+        
+        // Set user ID for analytics
+        if (data.user) {
+          await analyticsService.setUserId(data.user.id);
+        }
       }
 
       return { data, error };

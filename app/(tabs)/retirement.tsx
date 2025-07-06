@@ -15,6 +15,7 @@ import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 import ModernSlider from '@/components/ModernSlider';
 import { usePortfolioSync } from '@/hooks/usePortfolioSync';
+import { analyticsService } from '@/lib/analytics';
 
 const { width } = Dimensions.get('window');
 
@@ -119,6 +120,12 @@ export default function RetirementScreen() {
   useEffect(() => {
     if (mounted.current) {
       calculateRetirementProjections();
+      // Track retirement planning usage
+      analyticsService.trackRetirementPlanning({
+        portfolio_value: portfolioValue,
+        etf_selected: selectedETF.symbol,
+        strategy: withdrawalStrategy,
+      });
     }
   }, [portfolioValue, selectedETF, withdrawalStrategy, years]);
 

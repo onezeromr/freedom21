@@ -16,6 +16,7 @@
       "expo-router", 
       "expo-font", 
       "expo-web-browser",
+      "@react-native-firebase/app",
       [
         "expo-router",
         {

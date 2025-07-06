@@ -16,6 +16,7 @@ import AnimatedCard from '@/components/AnimatedCard';
 import GlassCard from '@/components/GlassCard';
 import { usePortfolioSync } from '@/hooks/usePortfolioSync';
 import { useAuth } from '@/hooks/useAuth';
+import { analyticsService } from '@/lib/analytics';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -198,6 +199,11 @@ export default function TableScreen() {
     const result = await savePortfolioEntry(amount, target);
     if (result) {
       setCurrentPortfolioValue('');
+      // Track portfolio tracking usage
+      analyticsService.trackFeatureUsage('portfolio_tracking', {
+        amount: amount,
+        variance: amount - target,
+      });
       Alert.alert('Success', 'Portfolio entry saved successfully!');
     } else {
       Alert.alert('Error', 'Failed to save portfolio entry. Please try again.');

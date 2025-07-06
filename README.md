@@ -772,6 +772,33 @@ if (DEBUG) {
 
 ## 📈 Analytics & Monitoring
 
+### Google Analytics Integration
+
+The app includes comprehensive Google Analytics tracking using Firebase Analytics:
+
+**Tracked Events:**
+- Page views and screen navigation
+- Calculator usage with parameters (asset, amount, timeframe)
+- Scenario saves and comparisons
+- Chart interactions and timeframe changes
+- Retirement planning usage
+- Live CAGR data usage
+- User sign ups and sign ins
+- Feature usage across all tabs
+- User engagement time tracking
+
+**Implementation:**
+- Cross-platform support (web and mobile)
+- Automatic page view tracking
+- Custom event tracking for business metrics
+- User property and ID tracking
+- Engagement time measurement
+
+**Configuration:**
+- Measurement ID: `G-8N2LSBDFJ5`
+- Firebase project integration
+- Web and mobile platform support
+
 ### Performance Monitoring
 ```typescript
 // Track calculation performance

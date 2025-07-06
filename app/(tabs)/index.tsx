@@ -19,6 +19,7 @@ import ModernSlider from '@/components/ModernSlider';
 import LiveCAGRDisplay from '@/components/LiveCAGRDisplay';
 import { usePortfolioSync } from '@/hooks/usePortfolioSync';
 import { useAuth } from '@/hooks/useAuth';
+import { analyticsService } from '@/lib/analytics';
 
 const { width } = Dimensions.get('window');
 
@@ -160,6 +161,15 @@ export default function CalculatorScreen() {
         inflationRate,
         useInflationAdjustment,
       });
+      
+      // Track calculator usage
+      analyticsService.trackCalculatorUsage({
+        asset: selectedAsset,
+        monthly_amount: monthlyAmount,
+        years: years,
+        starting_amount: startingAmount,
+        strategy_type: pauseAfterYears ? 'pause' : boostAfterYears ? 'boost' : 'standard',
+      });
     }, 1500); // 1.5 second debounce to reduce sync frequency
 
     return () => clearTimeout(timeoutId);
@@ -243,6 +253,14 @@ export default function CalculatorScreen() {
     }
     
     setScenarioName('');
+    
+    // Track scenario save
+    analyticsService.trackScenarioSave({
+      asset: selectedAsset,
+      future_value: portfolioState.futureValue,
+      outperformance: portfolioState.outperformance,
+    });
+    
     Alert.alert('Success', `Scenario "${newScenario.name}" saved successfully!`);
   };
 

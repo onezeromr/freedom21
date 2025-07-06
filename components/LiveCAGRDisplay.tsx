@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'rea
 import { ChevronDown, TrendingUp, RefreshCw, Wifi, WifiOff, Clock, TriangleAlert as AlertTriangle } from 'lucide-react-native';
 import { getAssetCAGR, CAGRResult, forceRefreshAsset } from '../services/twelveData';
 import GlassCard from './GlassCard';
+import { analyticsService } from '@/lib/analytics';
 
 interface LiveCAGRDisplayProps {
   assetName: string;
@@ -66,6 +67,12 @@ export default function LiveCAGRDisplay({
 
     if (onCAGRUpdate) {
       onCAGRUpdate(cagrValue);
+      // Track live CAGR usage
+      analyticsService.trackFeatureUsage('live_cagr_update', {
+        asset: assetName,
+        period: period,
+        cagr_value: cagrValue,
+      });
     }
   };
 
