@@ -408,9 +408,9 @@ export function usePortfolioSync() {
 
   // Update portfolio entry
   const updatePortfolioEntry = useCallback(async (id: string, amount: number, target: number) => {
-  }
-  )
-  const updatePortfolioEntry = useCallback(async (id: string, amount: number, target: number, date?: string) => {
+  }, [user, loadPortfolioEntries]);
+
+  const updatePortfolioEntryWithDate = useCallback(async (id: string, amount: number, target: number, date?: string) => {
     if (!user) {
       alert('Please sign in to update portfolio entries');
       return null;
