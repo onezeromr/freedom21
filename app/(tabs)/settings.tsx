@@ -54,11 +54,17 @@ export default function SettingsScreen() {
           onPress: async () => {
             setSigningOut(true);
             try {
-              await signOut();
-              // Force a small delay to ensure state updates
-              setTimeout(() => {
+              console.log('Starting sign out from settings...');
+              const result = await signOut();
+              
+              if (result.error) {
+                console.error('Sign out failed:', result.error);
+                Alert.alert('Error', `Failed to sign out: ${result.error.message}`);
                 setSigningOut(false);
-              }, 500);
+              } else {
+                console.log('Sign out successful from settings');
+                // Don't set signingOut to false here since page will reload
+              }
             } catch (error) {
               console.error('Unexpected sign out error:', error);
               Alert.alert('Error', 'An unexpected error occurred while signing out.');

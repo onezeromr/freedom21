@@ -453,20 +453,39 @@ export function usePortfolioSync() {
 
   // Delete portfolio entry - Fixed implementation
   const deletePortfolioEntry = useCallback(async (id: string) => {
+    console.log('deletePortfolioEntry called with id:', id);
+    
     if (!user) {
       console.log('No user authenticated');
+      Alert.alert('Error', 'Please sign in to delete portfolio entries');
       return false;
     }
 
     // Don't allow deletion of sample entries
     if (id.startsWith('sample-')) {
       console.log('Cannot delete sample entries');
+      Alert.alert('Cannot Delete', 'Sample entries cannot be deleted. Sign in to manage your own portfolio entries.');
       return false;
     }
 
     try {
       console.log(`Attempting to delete portfolio entry: ${id} for user: ${user.id}`);
       
+      // First verify the entry exists and belongs to the user
+      const { data: existingEntry, error: fetchError } = await supabase
+        .from('portfolio_entries')
+        .select('id, user_id')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (fetchError || !existingEntry) {
+        console.error('Entry not found or access denied:', fetchError);
+        Alert.alert('Error', 'Portfolio entry not found or access denied');
+        return false;
+      }
+
+      // Now delete the entry
       const { error } = await supabase
         .from('portfolio_entries')
         .delete()
@@ -475,6 +494,7 @@ export function usePortfolioSync() {
 
       if (error) {
         console.error('Error deleting portfolio entry:', error);
+        Alert.alert('Error', `Failed to delete portfolio entry: ${error.message}`);
         return false;
       }
 
@@ -485,6 +505,7 @@ export function usePortfolioSync() {
       return true;
     } catch (error) {
       console.error('Error deleting portfolio entry:', error);
+      Alert.alert('Error', 'An unexpected error occurred while deleting the entry');
       return false;
     }
   }, [user, loadPortfolioEntries]);

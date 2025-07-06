@@ -224,6 +224,8 @@ export default function TableScreen() {
       return;
     }
 
+    console.log('handleDeleteEntry called with id:', id);
+
     Alert.alert(
       'Delete Entry',
       'Are you sure you want to delete this portfolio entry?',
@@ -237,11 +239,8 @@ export default function TableScreen() {
             try {
               console.log('Attempting to delete entry:', id);
               const success = await deletePortfolioEntry(id);
-              if (success) {
-                Alert.alert('Success', 'Portfolio entry deleted successfully!');
-              } else {
-                Alert.alert('Error', 'Failed to delete portfolio entry. Please try again.');
-              }
+              console.log('Delete result:', success);
+              // Don't show additional alerts here since deletePortfolioEntry handles them
             } catch (error) {
               console.error('Delete error:', error);
               Alert.alert('Error', 'Failed to delete portfolio entry. Please try again.');
